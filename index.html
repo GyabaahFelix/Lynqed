@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>LYNQED - Campus Marketplace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#6366f1', // Violet 500
+              primaryDark: '#4f46e5', // Indigo 600
+              primaryLight: '#818cf8', // Indigo 400
+              accent: '#f43f5e', // Rose 500
+              secondary: '#ec4899', // Pink 500
+              background: '#f8fafc', // Slate 50
+              surface: '#ffffff',
+              danger: '#ef4444',
+              success: '#10b981',
+              warning: '#f59e0b',
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              display: ['Poppins', 'system-ui', 'sans-serif'],
+            },
+            boxShadow: {
+              'soft': '0 10px 40px -10px rgba(99, 102, 241, 0.15)',
+              'glow': '0 0 20px rgba(99, 102, 241, 0.4)',
+              'card': '0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02)',
+              'float': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.6s ease-out',
+              'slide-up': 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+              'bounce-slight': 'bounceSlight 3s infinite ease-in-out',
+              'blob': 'blob 7s infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(30px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              bounceSlight: {
+                '0%, 100%': { transform: 'translateY(-5%)' },
+                '50%': { transform: 'translateY(0)' },
+              },
+              blob: {
+                '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                '100%': { transform: 'translate(0px, 0px) scale(1)' },
+              }
+            }
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom scrollbar for cleaner UI */
+      ::-webkit-scrollbar {
+        width: 0px;
+        background: transparent;
+      }
+      .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .mt-safe {
+        margin-top: env(safe-area-inset-top);
+      }
+      body {
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Glass effect helper */
+      .glass {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+      }
+      /* Leaflet overrides */
+      .leaflet-container {
+        background: #e5e7eb;
+        font-family: 'Inter', sans-serif;
+      }
+      .custom-map-pin {
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      .custom-map-pin:hover {
+        transform: scale(1.1) translateY(-5px);
+        z-index: 1000 !important;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.84.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-background text-slate-800 antialiased selection:bg-primary/20 selection:text-primary">
+    <div id="root"></div>
+  </body>
+</html>

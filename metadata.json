@@ -1,0 +1,7 @@
+{
+  "name": "Copy of LYNQED",
+  "description": "Location-based campus marketplace connecting student entrepreneurs with nearby buyers.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
