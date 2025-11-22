@@ -222,17 +222,20 @@ export const AdminLogin: React.FC = () => {
 
     const handleAdminLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Force check if the email matches expected admin
-        if (email !== 'admin@lynqed.com') {
-            setError("Unauthorized Access");
-            return;
-        }
+        setError('');
         
+        // Log in normally first to authenticate credentials
         const result = await login(email, password);
-        if (result.success && result.role === 'admin') {
-            navigate('/admin/dashboard');
+        
+        if (result.success) {
+            // Then check if the authenticated user is actually an admin
+            if (result.role === 'admin') {
+                navigate('/admin/dashboard');
+            } else {
+                setError("Access Denied: Insufficient Privileges");
+            }
         } else {
-            setError('Invalid Admin Credentials');
+            setError('Invalid Credentials');
         }
     };
 
