@@ -126,16 +126,21 @@ export const VendorProducts: React.FC = () => {
 }
 
 export const VendorOrders: React.FC = () => {
-    const { orders, updateOrderStatus, vendors, currentUser } = useApp();
+    const { orders, updateOrderStatus, vendors, currentUser, refreshData } = useApp();
     const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+
+    // Force refresh on mount to ensure orders are seen
+    useEffect(() => {
+        refreshData();
+    }, []);
 
     const currentVendor = vendors.find(v => v.userId === currentUser?.id);
     const myOrders = orders.filter(o => o.vendorId === currentVendor?.vendorId);
 
     const filteredOrders = myOrders.filter(o => {
         if (filter === 'all') return true;
-        if (filter === 'active') return o.status !== 'delivered';
-        if (filter === 'completed') return o.status === 'delivered';
+        if (filter === 'active') return o.status !== 'delivered' && o.status !== 'declined' && o.status !== 'cancelled';
+        if (filter === 'completed') return o.status === 'delivered' || o.status === 'declined' || o.status === 'cancelled';
         return true;
     });
 
@@ -150,7 +155,6 @@ export const VendorOrders: React.FC = () => {
 
     const getNextAction = (status: OrderStatus, deliveryOption: 'delivery' | 'pickup') => {
         switch (status) {
-            case 'placed': return { label: 'Accept Order', next: 'received' as OrderStatus, icon: 'check', btnVariant: 'primary' as const };
             case 'received': return deliveryOption === 'delivery' 
                 ? { label: 'Dispatch Driver', next: 'in_route' as OrderStatus, icon: 'motorcycle', btnVariant: 'primary' as const }
                 : { label: 'Ready for Pickup', next: 'ready_for_pickup' as OrderStatus, icon: 'box', btnVariant: 'primary' as const };
@@ -189,6 +193,8 @@ export const VendorOrders: React.FC = () => {
                 ) : (
                     filteredOrders.map(order => {
                         const nextAction = getNextAction(order.status, order.deliveryOption);
+                        const isPlaced = order.status === 'placed';
+
                         return (
                             <Card key={order.id} className="p-5 overflow-visible">
                                 <div className="flex justify-between items-start mb-4 border-b border-gray-50 pb-3">
@@ -204,7 +210,7 @@ export const VendorOrders: React.FC = () => {
                                     </div>
                                     <div className="text-right">
                                         <span className="block font-bold text-primary">₵{order.total.toFixed(2)}</span>
-                                        <span className={`text-[10px] font-bold uppercase tracking-wide ${order.status === 'delivered' ? 'text-green-500' : 'text-blue-500'}`}>
+                                        <span className={`text-[10px] font-bold uppercase tracking-wide ${order.status === 'delivered' ? 'text-green-500' : order.status === 'declined' ? 'text-red-500' : 'text-blue-500'}`}>
                                             {order.status.replace('_', ' ')}
                                         </span>
                                     </div>
@@ -226,16 +232,26 @@ export const VendorOrders: React.FC = () => {
                                     <button className="text-xs font-bold text-gray-400 hover:text-gray-600">
                                         <i className="fa-solid fa-circle-info mr-1"></i> Details
                                     </button>
-                                    {nextAction && (
-                                        <Button 
-                                            size="sm" 
-                                            variant={nextAction.btnVariant}
-                                            onClick={(e) => handleStatusChange(e, order.id, nextAction.next)}
-                                            icon={nextAction.icon}
-                                        >
-                                            {nextAction.label}
-                                        </Button>
-                                    )}
+                                    
+                                    <div className="flex gap-2">
+                                        {isPlaced ? (
+                                            <>
+                                                <Button size="sm" variant="danger" onClick={(e) => handleStatusChange(e, order.id, 'declined')} icon="xmark">Decline</Button>
+                                                <Button size="sm" variant="primary" onClick={(e) => handleStatusChange(e, order.id, 'received')} icon="check">Accept</Button>
+                                            </>
+                                        ) : (
+                                            nextAction && (
+                                                <Button 
+                                                    size="sm" 
+                                                    variant={nextAction.btnVariant}
+                                                    onClick={(e) => handleStatusChange(e, order.id, nextAction.next)}
+                                                    icon={nextAction.icon}
+                                                >
+                                                    {nextAction.label}
+                                                </Button>
+                                            )
+                                        )}
+                                    </div>
                                 </div>
                             </Card>
                         );

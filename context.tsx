@@ -26,6 +26,7 @@ interface AppContextType {
   registerVendor: (data: { storeName: string; storeDescription: string; location: string; contactPhone: string }) => Promise<void>;
   
   // Store Actions
+  refreshData: () => Promise<void>;
   addProduct: (product: Omit<Product, 'id' | 'status' | 'images'> & { images: string[] }) => Promise<boolean>;
   updateProduct: (id: string, data: Partial<Product>) => Promise<void>;
   updateProductStatus: (id: string, status: Product['status']) => Promise<void>;
@@ -570,7 +571,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       registerVendor, addProduct, updateProduct, deleteProduct, updateProductStatus,
       addToCart, removeFromCart, clearCart, placeOrder, updateOrderStatus,
       registerDeliveryPerson, approveDeliveryPerson, toggleFavorite,
-      showToast, hideToast, requestNotificationPermission
+      showToast, hideToast, requestNotificationPermission,
+      refreshData: fetchData
     }}>
       {children}
     </AppContext.Provider>
