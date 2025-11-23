@@ -169,12 +169,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   // This allows the Avatar component to handle initials properly
                   const avatar = meta.avatar_url || null;
                   
+                  // If roles are missing in metadata, default to buyer
+                  const userRoles = meta.roles || ['buyer'];
+                  
                   const { error: insertError } = await supabase.from('profiles').insert({
                       id: user.id,
                       email: user.email,
                       name: meta.full_name || 'User',
                       avatarUrl: avatar,
-                      roles: meta.roles || ['buyer']
+                      roles: userRoles
                   });
                   
                   if (!insertError) {
@@ -291,9 +294,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   }
               }
           });
+
+          // HANDLE 'User already registered' Logic
+          // This happens if a user was deleted from the profiles table (DB) but still exists in Supabase Auth
+          if (error?.message === "User already registered" || error?.toString().includes("already registered")) {
+              
+              // Attempt to login with the provided credentials to verify ownership
+              const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+              
+              if (!loginError && loginData.user) {
+                  // Check if profile exists in DB
+                  const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', loginData.user.id).single();
+                  
+                  if (!existingProfile) {
+                      // Profile is missing! Recreate it (Account Recovery)
+                       await supabase.from('profiles').insert({
+                          id: loginData.user.id,
+                          email: email,
+                          name: fullName,
+                          avatarUrl: null,
+                          roles: [role]
+                      });
+                      
+                      // Update metadata to match new name
+                      await supabase.auth.updateUser({
+                          data: { full_name: fullName, roles: [role] }
+                      });
+
+                      await login(email, password); // Auto login
+                      showToast('Account recovered successfully!', 'success');
+                      return { success: true };
+                  } else {
+                      return { success: false, error: "Account already exists. Please log in." };
+                  }
+              } else {
+                  // Login failed (Wrong password or other issue)
+                  return { success: false, error: "Email is registered. Please log in or use 'Forgot Password' if you cannot access it." };
+              }
+          }
+
           if (error) throw error;
           
-          // Try to create profile immediately
+          // Normal Success Path
           if (data.user) {
                await supabase.from('profiles').insert({
                   id: data.user.id,
