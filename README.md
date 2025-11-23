@@ -2,7 +2,7 @@
 
 **LYNQED** is a location-based hyper-local marketplace designed specifically for university campuses. It bridges the gap between student entrepreneurs (vendors) and buyers, facilitating real-time commerce, delivery management, and community connection.
 
-> **Status:** Deployed on vercel
+> **Status:** Development Complete / Deployment Pending 🚧
 
 ---
 

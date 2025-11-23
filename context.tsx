@@ -40,6 +40,7 @@ interface AppContextType {
   toggleFavorite: (productId: string) => void;
   
   // UI Actions
+  showToast: (message: string, type: 'success' | 'error' | 'info') => void;
   hideToast: () => void;
   requestNotificationPermission: () => Promise<boolean>;
 
@@ -65,12 +66,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const userRef = useRef<User | null>(null);
   
   const [cart, setCart] = useState<CartItem[]>(() => {
-      const saved = localStorage.getItem('lynqed_cart');
-      return saved ? JSON.parse(saved) : [];
+      try {
+          const saved = localStorage.getItem('lynqed_cart');
+          return saved ? JSON.parse(saved) : [];
+      } catch (e) { return []; }
   });
   const [favorites, setFavorites] = useState<string[]>(() => {
-      const saved = localStorage.getItem('lynqed_favs');
-      return saved ? JSON.parse(saved) : [];
+      try {
+          const saved = localStorage.getItem('lynqed_favs');
+          return saved ? JSON.parse(saved) : [];
+      } catch (e) { return []; }
   });
 
   // Keep Ref in sync
@@ -93,17 +98,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const orderSubscription = supabase
       .channel('public:orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
-          const newOrder = payload.new as Order;
+          const newOrder = payload.new as any;
+          
           // Check if the new order belongs to the currently logged in vendor
           if (userRef.current) {
               // Fetch the vendor details for this order to see if it matches current user
               const { data: vendorData } = await supabase
                   .from('vendors')
-                  .select('userId')
+                  .select('*')
                   .eq('vendorId', newOrder.vendorId)
                   .single();
                   
-              if (vendorData && vendorData.userId === userRef.current.id) {
+              // Handle snake_case vs camelCase mapping if needed
+              const vUserId = vendorData?.userId || vendorData?.user_id;
+
+              if (vUserId && vUserId === userRef.current.id) {
                   // Notify Vendor
                   playNotificationSound();
                   showToast(`New Order! ₵${newOrder.total}`, 'info');
@@ -127,55 +136,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem('lynqed_favs', JSON.stringify(favorites)); }, [favorites]);
 
   const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-          await fetchUserProfile(session.user.id);
-      } else {
-          setCurrentUser(null);
-          setCurrentRole('guest');
+      try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+              await fetchUserProfile(session.user.id);
+          } else {
+              setCurrentUser(null);
+              setCurrentRole('guest');
+              setIsLoading(false);
+          }
+      } catch (e) {
+          console.error("Session check failed", e);
           setIsLoading(false);
       }
   };
 
   const fetchUserProfile = async (userId: string): Promise<User | null> => {
-      let { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      
-      // SELF-HEALING Logic
-      if (!data) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user && user.user_metadata) {
-              const meta = user.user_metadata;
-              const { error: insertError } = await supabase.from('profiles').insert({
-                  id: user.id,
-                  email: user.email,
-                  name: meta.full_name || 'User',
-                  avatarUrl: meta.avatar_url,
-                  roles: meta.roles || ['buyer']
-              });
-              
-              if (!insertError) {
-                  const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).single();
-                  data = retryData;
+      try {
+          let { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+          
+          // SELF-HEALING Logic: If profile missing but auth exists
+          if (!data) {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user && user.user_metadata) {
+                  const meta = user.user_metadata;
+                  const { error: insertError } = await supabase.from('profiles').insert({
+                      id: user.id,
+                      email: user.email,
+                      name: meta.full_name || 'User',
+                      avatarUrl: meta.avatar_url,
+                      roles: meta.roles || ['buyer']
+                  });
+                  
+                  if (!insertError) {
+                      const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).single();
+                      data = retryData;
+                  }
               }
           }
-      }
 
-      if (data) {
-          const user: User = {
-              id: data.id,
-              email: data.email,
-              name: data.name,
-              avatarUrl: data.avatarUrl || data.avatar_url,
-              roles: data.roles as Role[]
-          };
-          setCurrentUser(user);
-          const defaultRole = user.roles.includes('vendor') ? 'vendor' : user.roles.includes('admin') ? 'admin' : 'buyer';
-          setCurrentRole(defaultRole);
-          return user;
+          if (data) {
+              const user: User = {
+                  id: data.id,
+                  email: data.email,
+                  name: data.name,
+                  avatarUrl: data.avatarUrl || data.avatar_url,
+                  roles: data.roles as Role[]
+              };
+              setCurrentUser(user);
+              const defaultRole = user.roles.includes('vendor') ? 'vendor' : user.roles.includes('admin') ? 'admin' : 'buyer';
+              setCurrentRole(defaultRole);
+              
+              setIsLoading(false);
+              return user;
+          }
+      } catch (e) {
+          console.error("Profile fetch error", e);
       }
       
       setIsLoading(false);
@@ -183,342 +203,374 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const fetchData = async () => {
-      // Fetch Products
-      const { data: prodData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-      if (prodData) setProducts(prodData as Product[]);
-
-      // Fetch Vendors
-      const { data: vendData } = await supabase.from('vendors').select('*');
-      if (vendData) {
-          const mappedVendors = vendData.map((v: any) => ({
-              ...v,
-              createdAt: v.created_at,
-              storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url
-          }));
-          setVendors(mappedVendors as Vendor[]);
-      }
-
-      // Fetch Orders
-      const { data: ordData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-      if (ordData) {
-          const mappedOrders = ordData.map((o: any) => ({
-              ...o,
-              items: o.items,
-              createdAt: o.created_at
-          }));
-          setOrders(mappedOrders);
-      }
-
-      // Fetch Delivery Persons
-      const { data: delData } = await supabase.from('delivery_persons').select('*');
-      if (delData) setDeliveryPersons(delData as any[]);
-  };
-
-  // --- Notification Helpers ---
-  
-  const playNotificationSound = () => {
       try {
-          // Short pleasant beep data URI
-          const audio = new Audio("data:audio/wav;base64,UklGRl9vT1BXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU..."); // Placeholder, using generic alert logic below
-          // Since base64 audio strings are long, we'll rely on a simple oscillator or visual feedback if audio fails.
-          // Using a cleaner standard browser beep approach isn't direct, so we just log for MVP or rely on system notification sound.
-          console.log("Playing notification sound");
+          // Fetch Products
+          const { data: prodData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+          if (prodData) {
+              const mappedProducts = prodData.map((p: any) => ({
+                  ...p,
+                  vendorId: p.vendorId || p.vendor_id,
+                  contactPhone: p.contactPhone || p.contact_phone
+              }));
+              setProducts(mappedProducts as Product[]);
+          }
+
+          // Fetch Vendors
+          const { data: vendData } = await supabase.from('vendors').select('*');
+          if (vendData) {
+              const mappedVendors = vendData.map((v: any) => ({
+                  ...v,
+                  vendorId: v.vendorId || v.vendor_id,
+                  userId: v.userId || v.user_id,
+                  storeName: v.storeName || v.store_name,
+                  storeDescription: v.storeDescription || v.store_description,
+                  storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url,
+                  isApproved: v.isApproved !== undefined ? v.isApproved : v.is_approved,
+                  createdAt: v.created_at,
+                  contactPhone: v.contactPhone || v.contact_phone
+              }));
+              setVendors(mappedVendors as Vendor[]);
+          }
+
+          // Fetch Orders
+          const { data: ordData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+          if (ordData) {
+             const mappedOrders = ordData.map((o: any) => ({
+                 ...o,
+                 buyerId: o.buyerId || o.buyer_id,
+                 vendorId: o.vendorId || o.vendor_id,
+                 deliveryOption: o.deliveryOption || o.delivery_option,
+                 createdAt: o.created_at,
+                 // Ensure items is parsed if string
+                 items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
+             }));
+             setOrders(mappedOrders as Order[]);
+          }
+
+          // Fetch Delivery Persons
+          const { data: delData } = await supabase.from('delivery_persons').select('*');
+          if (delData) {
+              const mappedDel = delData.map((d: any) => ({
+                  ...d,
+                  userId: d.userId || d.user_id,
+                  fullName: d.fullName || d.full_name,
+                  vehicleType: d.vehicleType || d.vehicle_type
+              }));
+              setDeliveryPersons(mappedDel as DeliveryPerson[]);
+          }
       } catch (e) {
-          console.error("Audio play failed", e);
+          console.error("Data fetch error", e);
       }
-  };
-
-  const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) return false;
-    const permission = await Notification.requestPermission();
-    return permission === "granted";
-  };
-
-  const sendBrowserNotification = (order: Order) => {
-      if (Notification.permission === "granted") {
-          new Notification("LYNQED: New Order Received!", {
-              body: `New order placed for ₵${order.total}. Check your dashboard.`,
-              icon: '/vite.svg' // Uses default vite icon or public logo
-          });
-      }
-  };
-
-  // --- UI Actions ---
-  const hideToast = () => setToast(null);
-  const showToast = (message: string, type: 'success'|'error'|'info' = 'success') => {
-      setToast({ message, type });
   };
 
   // --- Auth Actions ---
+  const login = async (email: string, pass: string): Promise<{success: boolean, role?: Role, error?: string}> => {
+      try {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+          if (error) throw error;
+          
+          if (data.user) {
+              // 1. Fetch Profile and set Current User
+              const user = await fetchUserProfile(data.user.id);
+              
+              // 2. CRITICAL: Refresh Data to ensure vendor mapping works for the new user
+              await fetchData();
 
-  const signup = async (email: string, password: string, fullName: string, role: Role) => {
-      const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-              data: {
-                  full_name: fullName,
-                  roles: [role],
-                  avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`
+              if (user) {
+                   // Check for admin role in the LIVE database profile
+                   if (user.roles.includes('admin')) return { success: true, role: 'admin' };
+                   if (user.roles.includes('vendor')) return { success: true, role: 'vendor' };
+                   return { success: true, role: 'buyer' };
               }
           }
-      });
-
-      if (error) return { success: false, error: error.message };
-
-      if (data.user) {
-          // We attempt to create the profile immediately
-          const { error: profileError } = await supabase.from('profiles').insert({
-              id: data.user.id,
-              email: email,
-              name: fullName,
-              avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`,
-              roles: [role]
-          });
-          // Fetch profile to ensure state is consistent
-          await fetchUserProfile(data.user.id);
-          return { success: true };
+          return { success: false, error: "Profile not found" };
+      } catch (e: any) {
+          return { success: false, error: e.message || "Login failed" };
       }
-
-      return { success: false, error: 'Signup failed' };
   };
 
-  const login = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-    });
-
-    if (error) return { success: false, error: error.message };
-    
-    if (data.user) {
-        // Force fetch live data from database to get Role
-        const userProfile = await fetchUserProfile(data.user.id);
-        let userRole: Role = 'buyer';
-        
-        // Prioritize DB role over metadata
-        if (userProfile && userProfile.roles) {
-             const roles = userProfile.roles;
-             userRole = roles.includes('admin') ? 'admin' : roles.includes('vendor') ? 'vendor' : 'buyer';
-        } else if (data.user.user_metadata?.roles) {
-             // Fallback to metadata
-             const roles = data.user.user_metadata.roles;
-             userRole = roles.includes('admin') ? 'admin' : roles.includes('vendor') ? 'vendor' : 'buyer';
-        }
-        showToast(`Welcome back!`, 'success');
-        return { success: true, role: userRole };
-    }
-    
-    return { success: false, error: 'Login failed' };
+  const signup = async (email: string, password: string, fullName: string, role: Role) => {
+      try {
+          const { data, error } = await supabase.auth.signUp({
+              email, 
+              password,
+              options: {
+                  data: {
+                      full_name: fullName,
+                      roles: [role]
+                  }
+              }
+          });
+          if (error) throw error;
+          
+          // Try to create profile immediately if possible (but don't block if RLS prevents it before confirm)
+          if (data.user) {
+               await supabase.from('profiles').insert({
+                  id: data.user.id,
+                  email: email,
+                  name: fullName,
+                  avatarUrl: `https://ui-avatars.com/api/?name=${fullName}&background=random`,
+                  roles: [role]
+              });
+              
+              await login(email, password); // Auto login
+              return { success: true };
+          }
+          return { success: false, error: "Signup failed" };
+      } catch (e: any) {
+          return { success: false, error: e.message };
+      }
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setCurrentUser(null);
-    setCurrentRole('guest');
-    setCart([]);
-    showToast('Logged out successfully', 'info');
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      setCurrentRole('guest');
+      setCart([]);
+      setIsLoading(false);
+      // Optional: Refresh data to clear personal views, though redirect usually handles this
+      fetchData(); 
   };
 
   const switchRole = (role: Role) => {
-    if(currentUser?.roles.includes(role) || role === 'guest') {
-      setCurrentRole(role);
-      showToast(`Switched to ${role} mode`, 'info');
-    }
+      if (currentUser?.roles.includes(role)) {
+          setCurrentRole(role);
+      }
   };
 
   // --- Store Actions ---
+  const registerVendor = async (data: any) => {
+      if (!currentUser) return;
+      const newVendor = {
+          vendorId: `vendor-${Date.now()}`,
+          userId: currentUser.id,
+          storeName: data.storeName,
+          storeDescription: data.storeDescription,
+          location: data.location,
+          storeAvatarUrl: `https://ui-avatars.com/api/?name=${data.storeName}`,
+          contactPhone: data.contactPhone,
+          isApproved: true,
+          rating: 5.0
+      };
+      
+      // Save to Supabase
+      const { error } = await supabase.from('vendors').insert({
+          vendorId: newVendor.vendorId,
+          user_id: newVendor.userId, // snake_case for DB
+          storeName: newVendor.storeName,
+          storeDescription: newVendor.storeDescription,
+          storeAvatarUrl: newVendor.storeAvatarUrl,
+          location: newVendor.location,
+          contactPhone: newVendor.contactPhone,
+          isApproved: true
+      });
 
-  const registerVendor = async (data: { storeName: string; storeDescription: string; location: string; contactPhone: string }) => {
-    if (!currentUser) return;
-
-    const vendorId = `vendor-${Date.now()}`;
-    const { error } = await supabase.from('vendors').insert({
-        vendorId: vendorId,
-        userId: currentUser.id,
-        storeName: data.storeName,
-        storeDescription: data.storeDescription,
-        location: data.location,
-        contactPhone: data.contactPhone,
-        storeAvatarUrl: currentUser.avatarUrl,
-        isApproved: true,
-        rating: 5.0
-    });
-
-    if (!error) {
-        const newRoles = [...currentUser.roles, 'vendor'];
-        await supabase.from('profiles').update({ roles: newRoles }).eq('id', currentUser.id);
-        // Update auth metadata as well
-        await supabase.auth.updateUser({ data: { roles: newRoles } });
-        
-        await fetchUserProfile(currentUser.id);
-        fetchData(); 
-        showToast('Store created successfully!', 'success');
-    }
+      if (!error) {
+           // Update User Roles locally and in DB
+          if (!currentUser.roles.includes('vendor')) {
+              const newRoles = [...currentUser.roles, 'vendor'];
+              await supabase.from('profiles').update({ roles: newRoles }).eq('id', currentUser.id);
+              setCurrentUser({ ...currentUser, roles: newRoles as Role[] });
+          }
+          setCurrentRole('vendor');
+          showToast('Store created successfully!', 'success');
+          fetchData();
+      } else {
+          showToast('Failed to create store.', 'error');
+          console.error(error);
+      }
   };
 
-  const addProduct = async (data: Omit<Product, 'id' | 'status' | 'images'> & { images: string[] }) => {
-     // Robust check: find vendor by checking both user_id formats
-     const vendor = vendors.find(v => v.userId === currentUser?.id);
-     
-     if (!vendor) {
-         console.error("Vendor Check Failed. CurrentUser:", currentUser?.id, "Vendors:", vendors);
-         showToast('Vendor profile not found. Please contact support.', 'error');
-         return false;
-     }
+  const addProduct = async (productData: any) => {
+      if (!currentUser) return false;
+      const myVendor = vendors.find(v => v.userId === currentUser.id);
+      if (!myVendor) {
+          alert("Vendor profile not found");
+          return false;
+      }
 
-     const { error } = await supabase.from('products').insert({
-        vendorId: vendor.vendorId,
-        title: data.title,
-        description: data.description,
-        price: data.price,
-        currency: data.currency,
-        category: data.category,
-        stock: data.stock,
-        images: data.images,
-        contactPhone: data.contactPhone,
-        status: 'pending', // Always pending initially
-        location: data.location || vendor.location,
-        rating: 0
-     });
+      const { error } = await supabase.from('products').insert({
+          vendorId: myVendor.vendorId, // camelCase here maps to column if defined with quotes, else user snake_case if needed.
+          // Using snake_case for DB columns mostly:
+          vendor_id: myVendor.vendorId, 
+          title: productData.title,
+          description: productData.description,
+          price: productData.price,
+          currency: productData.currency,
+          category: productData.category,
+          images: productData.images,
+          stock: productData.stock,
+          status: 'pending', // Pending by default
+          location: productData.location,
+          contactPhone: productData.contactPhone,
+          rating: 0
+      });
 
-     if (!error) {
-         fetchData();
-         showToast('Product submitted for approval', 'success');
-         return true;
-     }
-     console.error(error);
-     showToast('Failed to add product', 'error');
-     return false;
+      if (!error) {
+          showToast('Product submitted for approval!', 'success');
+          fetchData();
+          return true;
+      } else {
+          console.error(error);
+          showToast('Failed to add product', 'error');
+          return false;
+      }
   };
 
   const updateProduct = async (id: string, data: Partial<Product>) => {
       const { error } = await supabase.from('products').update(data).eq('id', id);
       if (!error) {
-          fetchData();
           showToast('Product updated', 'success');
+          fetchData();
+      }
+  };
+
+  const deleteProduct = async (id: string) => {
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (!error) {
+          showToast('Product deleted', 'success');
+          fetchData();
       }
   };
 
   const updateProductStatus = async (id: string, status: Product['status']) => {
-    const { error } = await supabase.from('products').update({ status }).eq('id', id);
-    if (!error) {
-        fetchData();
-        showToast(`Product ${status}`, 'info');
-    }
+      const { error } = await supabase.from('products').update({ status }).eq('id', id);
+      if (!error) {
+          showToast(`Product ${status}`, 'success');
+          fetchData();
+      }
   };
 
-  const deleteProduct = async (id: string) => {
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (!error) {
-        fetchData();
-        showToast('Product deleted', 'info');
-    }
+  // --- Cart/Order Actions ---
+  const addToCart = (product: Product, quantity = 1) => {
+      setCart(prev => {
+          const existing = prev.find(item => item.productId === product.id);
+          if (existing) {
+              return prev.map(item => item.productId === product.id ? { ...item, quantity: item.quantity + quantity } : item);
+          }
+          return [...prev, { productId: product.id, quantity, product }];
+      });
+      showToast('Added to Cart', 'success');
   };
 
-  // --- Order Actions ---
+  const removeFromCart = (productId: string) => {
+      setCart(prev => prev.filter(item => item.productId !== productId));
+  };
+
+  const clearCart = () => setCart([]);
 
   const placeOrder = async (deliveryOption: 'delivery' | 'pickup') => {
-    if (!currentUser || cart.length === 0) return;
-    
-    // Assuming all items are from same vendor for MVP or handling first vendor
-    const vendorId = cart[0].product.vendorId;
-    const total = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+      if (cart.length === 0) return;
+      
+      // Group items by vendor
+      const itemsByVendor: Record<string, CartItem[]> = {};
+      cart.forEach(item => {
+          if (!itemsByVendor[item.product.vendorId]) itemsByVendor[item.product.vendorId] = [];
+          itemsByVendor[item.product.vendorId].push(item);
+      });
 
-    const { error } = await supabase.from('orders').insert({
-        buyerId: currentUser.id,
-        vendorId: vendorId,
-        items: cart,
-        total: total,
-        status: 'placed',
-        deliveryOption: deliveryOption
-    });
+      // Create an order for each vendor
+      for (const vendorId in itemsByVendor) {
+          const items = itemsByVendor[vendorId];
+          const total = items.reduce((sum, i) => sum + (i.product.price * i.quantity), 0);
+          
+          await supabase.from('orders').insert({
+              buyerId: currentUser ? currentUser.id : 'guest', // Handle guest logic if needed
+              buyer_id: currentUser ? currentUser.id : null, // DB column
+              vendorId: vendorId,
+              vendor_id: vendorId, // DB column
+              items: items, // JSONB
+              total: total + (deliveryOption === 'delivery' ? 10 : 0),
+              status: 'placed',
+              deliveryOption: deliveryOption,
+              delivery_option: deliveryOption
+          });
 
-    if (!error) {
-        // Decrement Stock
-        for (const item of cart) {
-            const newStock = Math.max(0, item.product.stock - item.quantity);
-            await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
-        }
-        fetchData();
-        clearCart();
-        showToast('Order placed successfully!', 'success');
-    } else {
-        showToast('Failed to place order', 'error');
-    }
+          // Decrement Stock
+          for (const item of items) {
+              const newStock = Math.max(0, item.product.stock - item.quantity);
+              await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
+          }
+      }
+
+      showToast('Order Placed Successfully!', 'success');
+      clearCart();
+      fetchData();
   };
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
       if (!error) {
+          showToast(`Order updated to ${status}`, 'success');
           fetchData();
-          showToast(`Order status updated to ${status.replace('_', ' ')}`, 'success');
       }
   };
-
-  // --- Other Actions ---
-  
-  const addToCart = (product: Product, quantity = 1) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.productId === product.id);
-      if (existing) {
-        showToast(`Updated quantity for ${product.title}`, 'success');
-        return prev.map(item => item.productId === product.id ? { ...item, quantity: item.quantity + quantity } : item);
-      }
-      showToast(`${product.title} added to cart`, 'success');
-      return [...prev, { productId: product.id, quantity, product }];
-    });
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.productId !== productId));
-    showToast('Item removed from cart', 'info');
-  };
-
-  const clearCart = () => setCart([]);
 
   const toggleFavorite = (productId: string) => {
       setFavorites(prev => {
-          const isExisting = prev.includes(productId);
-          if (isExisting) {
-              showToast('Removed from Wishlist', 'info');
-              return prev.filter(id => id !== productId);
-          } else {
-              showToast('Added to Wishlist', 'success');
-              return [...prev, productId];
-          }
+          const exists = prev.includes(productId);
+          const newFavs = exists ? prev.filter(id => id !== productId) : [...prev, productId];
+          showToast(exists ? 'Removed from Wishlist' : 'Added to Wishlist', 'info');
+          return newFavs;
       });
   };
 
-  const registerDeliveryPerson = async (data: Partial<DeliveryPerson>) => {
-    if (!currentUser) return;
-    const { error } = await supabase.from('delivery_persons').insert({
-      userId: currentUser.id,
-      fullName: data.fullName || currentUser.name,
-      vehicleType: data.vehicleType || 'bicycle',
-      status: 'pending'
-    });
-    if (!error) {
-        fetchData();
-        showToast('Application submitted', 'success');
-    }
+  // --- Other Actions ---
+  const registerDeliveryPerson = async (data: any) => {
+      if (!currentUser) return;
+      await supabase.from('delivery_persons').insert({
+          userId: currentUser.id,
+          user_id: currentUser.id,
+          fullName: data.fullName,
+          full_name: data.fullName,
+          vehicleType: data.vehicleType,
+          vehicle_type: data.vehicleType,
+          status: 'pending'
+      });
+      fetchData();
   };
-  
+
   const approveDeliveryPerson = async (id: string) => {
-      const { error } = await supabase.from('delivery_persons').update({ status: 'approved' }).eq('id', id);
-      if (!error) {
-          fetchData();
-          showToast('Delivery person approved', 'success');
+      await supabase.from('delivery_persons').update({ status: 'approved' }).eq('id', id);
+      showToast('Staff approved', 'success');
+      fetchData();
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+      setToast({ message, type });
+  };
+
+  const hideToast = () => setToast(null);
+
+  const requestNotificationPermission = async () => {
+      if (!("Notification" in window)) return false;
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+  };
+
+  const playNotificationSound = () => {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log("Audio play failed", e));
+  };
+
+  const sendBrowserNotification = (order: any) => {
+      if (Notification.permission === 'granted') {
+          new Notification("New Order Received!", {
+              body: `Total: ₵${order.total} - ${order.deliveryOption}`,
+              icon: '/vite.svg'
+          });
       }
-  }
+  };
 
   return (
     <AppContext.Provider value={{
-      currentUser, currentRole, products, vendors, orders, cart, deliveryPersons, isLoading, favorites, toast,
-      login, signup, logout, switchRole, registerDeliveryPerson, registerVendor,
-      addProduct, updateProduct, updateProductStatus, deleteProduct, approveDeliveryPerson,
-      addToCart, removeFromCart, clearCart, placeOrder, updateOrderStatus, toggleFavorite,
-      hideToast, requestNotificationPermission
+      currentUser, currentRole, products, vendors, orders, deliveryPersons,
+      isLoading, cart, favorites, toast,
+      login, signup, logout, switchRole,
+      registerVendor, addProduct, updateProduct, deleteProduct, updateProductStatus,
+      addToCart, removeFromCart, clearCart, placeOrder, updateOrderStatus,
+      registerDeliveryPerson, approveDeliveryPerson, toggleFavorite,
+      showToast, hideToast, requestNotificationPermission
     }}>
       {children}
     </AppContext.Provider>
@@ -527,6 +579,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) throw new Error("useApp must be used within AppProvider");
+  if (!context) throw new Error('useApp must be used within AppProvider');
   return context;
 };
