@@ -150,7 +150,7 @@ export const BuyerDashboard: React.FC = () => {
             </div>
             <input 
                 readOnly
-                placeholder="Search products, brands, categories..." 
+                placeholder="Search Products..." 
                 className="block w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none cursor-pointer hover:bg-white hover:border-primary/30 transition-all"
             />
         </div>
