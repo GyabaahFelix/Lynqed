@@ -19,6 +19,8 @@ export interface Vendor {
   location: string;
   isApproved: boolean;
   rating: number;
+  createdAt?: string;
+  contactPhone?: string;
 }
 
 export interface DeliveryPerson {
@@ -70,4 +72,5 @@ export interface Category {
   id: string;
   name: string;
   icon: string;
+  image: string; // Added for realistic thumbnails
 }

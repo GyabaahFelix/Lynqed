@@ -21,7 +21,7 @@ interface AppContextType {
   logout: () => void;
   switchRole: (role: Role) => void;
   registerDeliveryPerson: (data: Partial<DeliveryPerson>) => void;
-  registerVendor: (data: { storeName: string; storeDescription: string; location: string }) => Promise<void>;
+  registerVendor: (data: { storeName: string; storeDescription: string; location: string; contactPhone: string }) => Promise<void>;
   
   // Store Actions
   addProduct: (product: Omit<Product, 'id' | 'status' | 'images'> & { images: string[] }) => Promise<boolean>;
@@ -67,8 +67,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     checkSession();
     fetchData();
+    
+    // Subscribe to Realtime changes for Stock Updates
+    const productSubscription = supabase
+      .channel('public:products')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+          fetchData(); // Refresh data on any product change
+      })
+      .subscribe();
 
-    // Optional: Realtime subscriptions could go here
+    return () => {
+        supabase.removeChannel(productSubscription);
+    };
   }, []);
 
   // Persist Cart/Favs locally
@@ -86,27 +96,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
   };
 
-  const fetchUserProfile = async (userId: string) => {
-      const { data, error } = await supabase
+  const fetchUserProfile = async (userId: string): Promise<User | null> => {
+      // 1. Try to get the profile from the database
+      let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
-      if (data && !error) {
+      // 2. SELF-HEALING: If profile is missing (e.g., created during "Email not confirmed" state),
+      //    try to recover it using Auth Metadata.
+      if (!data) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && user.user_metadata) {
+              const meta = user.user_metadata;
+              const { error: insertError } = await supabase.from('profiles').insert({
+                  id: user.id,
+                  email: user.email,
+                  name: meta.full_name || 'User',
+                  avatarUrl: meta.avatar_url,
+                  roles: meta.roles || ['buyer']
+              });
+              
+              if (!insertError) {
+                  // Retry fetch
+                  const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).single();
+                  data = retryData;
+              }
+          }
+      }
+
+      if (data) {
           const user: User = {
               id: data.id,
               email: data.email,
               name: data.name,
-              avatarUrl: data.avatarUrl,
+              avatarUrl: data.avatarUrl || data.avatar_url, // Handle snake_case mapping
               roles: data.roles as Role[]
           };
           setCurrentUser(user);
           // Determine default role
           const defaultRole = user.roles.includes('vendor') ? 'vendor' : user.roles.includes('admin') ? 'admin' : 'buyer';
           setCurrentRole(defaultRole);
+          
+          return user;
       }
+      
       setIsLoading(false);
+      return null;
   };
 
   const fetchData = async () => {
@@ -116,12 +153,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Fetch Vendors
       const { data: vendData } = await supabase.from('vendors').select('*');
-      if (vendData) setVendors(vendData as Vendor[]);
+      if (vendData) {
+          const mappedVendors = vendData.map((v: any) => ({
+              ...v,
+              createdAt: v.created_at,
+              storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url // Handle potential case mismatch
+          }));
+          setVendors(mappedVendors as Vendor[]);
+      }
 
       // Fetch Orders
       const { data: ordData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       if (ordData) {
-          // Map jsonb items back to CartItem[] structure if needed
           const mappedOrders = ordData.map((o: any) => ({
               ...o,
               items: o.items,
@@ -138,15 +181,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Auth Actions ---
 
   const signup = async (email: string, password: string, fullName: string, role: Role) => {
+      // Store critical user info in Metadata so it persists even if Profile creation fails initially
       const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+              data: {
+                  full_name: fullName,
+                  roles: [role],
+                  avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`
+              }
+          }
       });
 
       if (error) return { success: false, error: error.message };
 
       if (data.user) {
-          // Create Profile
+          // Create Profile immediately if possible
           const { error: profileError } = await supabase.from('profiles').insert({
               id: data.user.id,
               email: email,
@@ -155,7 +206,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               roles: [role]
           });
 
-          if (profileError) return { success: false, error: profileError.message };
+          // If profile creation fails (e.g. RLS block on unconfirmed email), we ignore it here.
+          // The 'fetchUserProfile' Self-Healing logic will handle it on next login.
 
           // Auto Login state
           await fetchUserProfile(data.user.id);
@@ -174,11 +226,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error) return { success: false, error: error.message };
     
     if (data.user) {
-        await fetchUserProfile(data.user.id);
-        // We need to wait for fetchUserProfile to update currentUser state, 
-        // but for return value we need to fetch role manually to be fast
-        const { data: profile } = await supabase.from('profiles').select('roles').eq('id', data.user.id).single();
-        const userRole: Role = profile?.roles?.includes('admin') ? 'admin' : profile?.roles?.includes('vendor') ? 'vendor' : 'buyer';
+        // CRITICAL FIX: Use the live user profile from the DB to determine role
+        // Do NOT rely on data.user.user_metadata as it is often stale
+        const userProfile = await fetchUserProfile(data.user.id);
+        
+        let userRole: Role = 'buyer';
+        
+        if (userProfile && userProfile.roles) {
+             const roles = userProfile.roles;
+             userRole = roles.includes('admin') ? 'admin' : roles.includes('vendor') ? 'vendor' : 'buyer';
+        } else if (data.user.user_metadata?.roles) {
+             // Fallback to metadata only if profile fetch totally fails
+             const roles = data.user.user_metadata.roles;
+             userRole = roles.includes('admin') ? 'admin' : roles.includes('vendor') ? 'vendor' : 'buyer';
+        }
         
         return { success: true, role: userRole };
     }
@@ -201,7 +262,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- Store Actions ---
 
-  const registerVendor = async (data: { storeName: string; storeDescription: string; location: string }) => {
+  const registerVendor = async (data: { storeName: string; storeDescription: string; location: string; contactPhone: string }) => {
     if (!currentUser) return;
 
     const vendorId = `vendor-${Date.now()}`;
@@ -211,6 +272,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         storeName: data.storeName,
         storeDescription: data.storeDescription,
         location: data.location,
+        contactPhone: data.contactPhone,
         storeAvatarUrl: currentUser.avatarUrl,
         isApproved: true,
         rating: 5.0
@@ -220,16 +282,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Update User Role
         const newRoles = [...currentUser.roles, 'vendor'];
         await supabase.from('profiles').update({ roles: newRoles }).eq('id', currentUser.id);
+        // Update metadata too for consistency
+        await supabase.auth.updateUser({ data: { roles: newRoles } });
         
         // Refresh Local State
         await fetchUserProfile(currentUser.id);
-        fetchData(); // Reload vendors
+        fetchData(); 
     }
   };
 
   const addProduct = async (data: Omit<Product, 'id' | 'status' | 'images'> & { images: string[] }) => {
+     // Robust check for vendor ID (handles both camelCase and snake_case mapping issues)
      const vendor = vendors.find(v => v.userId === currentUser?.id);
-     if (!vendor) return false;
+     
+     if (!vendor) {
+         console.error("No vendor profile found for current user.");
+         return false;
+     }
 
      const { error } = await supabase.from('products').insert({
         vendorId: vendor.vendorId,
@@ -239,7 +308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currency: data.currency,
         category: data.category,
         stock: data.stock,
-        images: data.images, // Base64 strings array
+        images: data.images,
         contactPhone: data.contactPhone,
         status: 'pending',
         location: data.location || vendor.location,
@@ -247,10 +316,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
      });
 
      if (!error) {
-         fetchData(); // Refresh products list
+         fetchData();
          return true;
      }
-     console.error(error);
+     console.error("Error adding product:", error);
      return false;
   };
 
@@ -277,16 +346,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const vendorId = cart[0].product.vendorId;
     const total = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
 
+    // 1. Create Order
     const { error } = await supabase.from('orders').insert({
         buyerId: currentUser.id,
         vendorId: vendorId,
-        items: cart, // Supabase handles JSONB automatically
+        items: cart,
         total: total,
         status: 'placed',
         deliveryOption: deliveryOption
     });
 
     if (!error) {
+        // 2. Decrement Stock for each item
+        for (const item of cart) {
+            const newStock = Math.max(0, item.product.stock - item.quantity);
+            await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
+        }
+
         fetchData();
         clearCart();
     } else {

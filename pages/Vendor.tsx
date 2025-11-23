@@ -537,7 +537,7 @@ export const EditProduct: React.FC = () => {
 export const VendorOnboarding: React.FC = () => {
     const { registerVendor } = useApp();
     const navigate = useNavigate();
-    const [formData, setFormData] = useState({ storeName: '', storeDescription: '', location: '' });
+    const [formData, setFormData] = useState({ storeName: '', storeDescription: '', location: '', contactPhone: '' });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -584,6 +584,15 @@ export const VendorOnboarding: React.FC = () => {
                     value={formData.location}
                     onChange={e => setFormData({...formData, location: e.target.value})}
                     icon="location-dot"
+                    required
+                />
+                <Input 
+                    label="Phone Number" 
+                    placeholder="e.g. 024xxxxxxx" 
+                    value={formData.contactPhone}
+                    onChange={e => setFormData({...formData, contactPhone: e.target.value})}
+                    icon="phone"
+                    type="tel"
                     required
                 />
                 

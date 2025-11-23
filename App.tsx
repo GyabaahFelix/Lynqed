@@ -5,7 +5,7 @@ import { AppProvider, useApp } from './context';
 import { Layout } from './components/Layout';
 import { Welcome, BuyerDashboard } from './pages/Home';
 import { SearchPage } from './pages/Search';
-import { ProductDetail, Cart, Checkout } from './pages/Product';
+import { ProductDetail, Cart, Checkout, StorePage } from './pages/Product';
 import { VendorDashboard, VendorProducts, AddProduct, EditProduct, VendorOrders, VendorOnboarding } from './pages/Vendor';
 import { AdminDashboard } from './pages/Admin';
 import { UserProfile, OrdersPage } from './pages/Profile';
@@ -29,7 +29,9 @@ const AppContent = () => {
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/store/:vendorId" element={<div className="p-10 text-center">Store Page Coming Soon</div>} />
+        
+        {/* Public Store Page */}
+        <Route path="/store/:vendorId" element={<StorePage />} />
 
         {/* Secret Admin Route */}
         <Route path="/secret-access" element={<AdminLogin />} />

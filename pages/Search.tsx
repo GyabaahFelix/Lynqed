@@ -16,15 +16,17 @@ export const SearchPage: React.FC = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
+  
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const markersLayerRef = useRef<any>(null); // Reference to the layer group holding markers
   
   const approvedProducts = products.filter(p => 
     p.status === 'approved' && 
     p.title.toLowerCase().includes(query.toLowerCase())
   );
 
-  // Initialize Map
+  // 1. Initialize Map (Run ONCE)
   useEffect(() => {
       if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -44,11 +46,34 @@ export const SearchPage: React.FC = () => {
             maxZoom: 20
         }).addTo(map);
 
-        // Add Vendors as Markers
-        vendors.filter(v => v.isApproved).forEach((v, index) => {
+        // Create a LayerGroup to hold markers (allows clearing them without destroying the map)
+        const markersLayer = window.L.layerGroup().addTo(map);
+        markersLayerRef.current = markersLayer;
+        mapInstanceRef.current = map;
+      }
+
+      // Cleanup on unmount
+      return () => {
+          if (mapInstanceRef.current) {
+              mapInstanceRef.current.remove();
+              mapInstanceRef.current = null;
+              markersLayerRef.current = null;
+          }
+      };
+  }, []); 
+
+  // 2. Update Markers (Run when vendors change)
+  useEffect(() => {
+      if (!mapInstanceRef.current || !markersLayerRef.current || !window.L) return;
+
+      // Clear existing markers before adding new ones
+      markersLayerRef.current.clearLayers();
+
+      const defaultCenter = [5.6506, -0.1962];
+      const map = mapInstanceRef.current;
+
+      vendors.filter(v => v.isApproved).forEach((v, index) => {
             // Simulate scattered locations around campus for demo purposes
-            // In a real app, v.location would contain real lat/lng
-            // Deterministic random offset based on index
             const latOffset = (Math.sin(index + 1) * 0.005); 
             const lngOffset = (Math.cos(index + 1) * 0.005);
             const position = [defaultCenter[0] + latOffset, defaultCenter[1] + lngOffset];
@@ -68,7 +93,7 @@ export const SearchPage: React.FC = () => {
                 iconAnchor: [24, 54]
             });
 
-            const marker = window.L.marker(position, { icon: customIcon }).addTo(map);
+            const marker = window.L.marker(position, { icon: customIcon });
             
             // Custom Popup
             const popupContent = `
@@ -81,7 +106,7 @@ export const SearchPage: React.FC = () => {
             
             marker.bindPopup(popupContent, { closeButton: false, offset: [0, -40] });
 
-            // Handle Popup Button Click (Global listener hack for Leaflet HTML content)
+            // Handle Popup Button Click
             marker.on('popupopen', () => {
                  const btn = document.getElementById(`visit-store-${v.vendorId}`);
                  if(btn) {
@@ -89,23 +114,16 @@ export const SearchPage: React.FC = () => {
                  }
             });
             
-            // Click to open drawer or center
+            // Click to center
             marker.on('click', () => {
                 map.setView(position, 16, { animate: true });
             });
-        });
 
-        mapInstanceRef.current = map;
-      }
+            // Add to the LayerGroup instead of the map directly
+            markersLayerRef.current.addLayer(marker);
+      });
 
-      // Cleanup
-      return () => {
-          if (mapInstanceRef.current) {
-              mapInstanceRef.current.remove();
-              mapInstanceRef.current = null;
-          }
-      };
-  }, [vendors]);
+  }, [vendors, navigate]); // Dependencies: Re-run when vendors list updates
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gray-100 flex flex-col">

@@ -85,10 +85,24 @@ export const BuyerDashboard: React.FC = () => {
   const [selectedCat, setSelectedCat] = useState('All');
   const [sortType, setSortType] = useState<'nearby' | 'price' | 'rating'>('nearby');
 
-  // 1. Categories
+  // 1. Compute Dynamic Categories
+  const standardNames = new Set(CATEGORIES.map(c => c.name));
+  const customCategories = Array.from(new Set(products.map(p => p.category)))
+    .filter(cat => cat && !standardNames.has(cat) && cat !== 'OTHER')
+    .map(cat => {
+        const sampleProduct = products.find(p => p.category === cat);
+        return {
+            id: `cat-custom-${cat.replace(/\s+/g, '-').toLowerCase()}`,
+            name: cat,
+            icon: 'tag',
+            image: sampleProduct?.images[0] || 'https://via.placeholder.com/150?text=' + cat
+        };
+    });
+
   const categoryList = [
-      { id: 'cat-all', name: 'All', icon: 'layer-group' },
-      ...CATEGORIES
+      { id: 'cat-all', name: 'All', icon: 'layer-group', image: '' },
+      ...CATEGORIES,
+      ...customCategories
   ];
 
   // 2. Filtering
@@ -103,7 +117,6 @@ export const BuyerDashboard: React.FC = () => {
   } else if (sortType === 'rating') {
       filteredProducts = [...filteredProducts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
   } else {
-      // Mock Nearby: Random shuffle but deterministic-ish
       filteredProducts = [...filteredProducts].sort((a, b) => a.id.localeCompare(b.id)); 
   }
 
@@ -155,9 +168,7 @@ export const BuyerDashboard: React.FC = () => {
       {/* Hero Banner */}
       <div className="px-4">
         <div className="relative bg-gradient-to-br from-gray-900 via-indigo-900 to-gray-900 rounded-2xl p-6 text-white overflow-hidden shadow-lg">
-            {/* Decorative elements */}
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary/30 rounded-full -mr-16 -mt-10 blur-3xl"></div>
-            
             <div className="relative z-10 flex justify-between items-center">
                 <div className="max-w-[65%]">
                     <h2 className="text-lg font-display font-bold mb-1 leading-tight">Student Entrepreneur?</h2>
@@ -188,13 +199,19 @@ export const BuyerDashboard: React.FC = () => {
                 return (
                     <div 
                         key={cat.id} 
-                        className={`flex flex-col items-center justify-center gap-1 cursor-pointer min-w-[64px] p-2 rounded-xl transition-all duration-300 border ${isSelected ? 'bg-white border-primary shadow-sm' : 'bg-transparent border-transparent hover:bg-white hover:border-gray-100'}`}
+                        className={`flex flex-col items-center justify-center gap-1 cursor-pointer min-w-[72px] rounded-xl transition-all duration-300 active:scale-95`}
                         onClick={() => setSelectedCat(cat.name)}
                     >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>
-                            <i className={`fa-solid fa-${cat.icon} text-sm`}></i>
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all overflow-hidden shadow-sm border-2 ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'}`}>
+                            {cat.image ? (
+                                <img src={cat.image} alt={cat.name} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
+                            ) : (
+                                <div className={`w-full h-full flex items-center justify-center bg-gray-200 text-gray-500`}>
+                                    <i className={`fa-solid fa-${cat.icon} text-lg`}></i>
+                                </div>
+                            )}
                         </div>
-                        <span className={`text-[10px] font-medium whitespace-nowrap ${isSelected ? 'text-primary font-bold' : 'text-gray-500'}`}>
+                        <span className={`text-[10px] font-medium whitespace-nowrap text-center w-full overflow-hidden text-ellipsis ${isSelected ? 'text-primary font-bold' : 'text-gray-600'}`}>
                             {cat.name}
                         </span>
                     </div>
@@ -217,65 +234,61 @@ export const BuyerDashboard: React.FC = () => {
                  <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-3">
                     <i className="fa-solid fa-box-open text-xl text-gray-300"></i>
                  </div>
-                 <p className="text-xs font-medium">No products found.</p>
+                 <p className="text-xs font-medium">No products found in {selectedCat}.</p>
              </div>
          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {filteredProducts.map(product => {
                     const vendor = vendors.find(v => v.vendorId === product.vendorId);
-                    // Use first image from array, or fallback
                     const mainImage = product.images && product.images.length > 0 ? product.images[0] : 'https://via.placeholder.com/300';
                     const isFav = favorites.includes(product.id);
                     
                     return (
                         <div 
                             key={product.id} 
-                            className="bg-white rounded-lg overflow-hidden border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all duration-300 flex flex-col relative group cursor-pointer" 
+                            className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 hover:shadow-xl transition-all duration-300 group relative flex flex-col h-full cursor-pointer"
                             onClick={() => navigate(`/buyer/product/${product.id}`)}
                         >
-                             {/* Fav Button Top Right */}
-                            <button 
-                                className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleFavorite(product.id);
-                                }}
-                            >
-                                <i className={`${isFav ? 'fa-solid text-red-500' : 'fa-regular'} fa-heart text-xs`}></i>
-                            </button>
-
-                            {/* Image Container - Contained & Centered */}
-                            <div className="aspect-square w-full p-4 bg-white flex items-center justify-center relative border-b border-gray-50">
+                             {/* Image - Fills large space (approx 80%) */}
+                            <div className="aspect-[4/5] w-full relative overflow-hidden">
                                 <img 
                                     src={mainImage} 
                                     alt={product.title} 
-                                    className="max-w-full max-h-full object-contain transition-transform duration-500 group-hover:scale-105" 
+                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
                                 />
-                                {product.stock === 0 && <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10"><span className="bg-gray-800 text-white text-[9px] px-2 py-1 font-bold uppercase tracking-wide">Out of Stock</span></div>}
+                                
+                                {/* Fav Button (Floating) */}
+                                <button 
+                                    className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleFavorite(product.id);
+                                    }}
+                                >
+                                    <i className={`${isFav ? 'fa-solid text-red-500' : 'fa-regular'} fa-heart text-xs`}></i>
+                                </button>
+
+                                {product.stock === 0 && <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10"><span className="bg-black/80 text-white text-[10px] px-3 py-1 rounded font-bold uppercase tracking-wide">Out of Stock</span></div>}
                             </div>
 
-                            {/* Content Body */}
-                            <div className="p-3 flex flex-col flex-grow">
-                                <h3 className="text-xs text-gray-700 font-medium leading-snug line-clamp-2 mb-1 h-[2.4em] group-hover:text-primary transition-colors">{product.title}</h3>
+                            {/* Bottom Details - Compact Area (approx 20%) */}
+                            <div className="p-3 bg-white flex flex-col justify-between flex-grow relative z-10">
+                                <div>
+                                    <h3 className="text-xs text-gray-800 font-bold leading-tight line-clamp-2 mb-1">{product.title}</h3>
+                                    <p className="text-[10px] text-gray-400 line-clamp-1">{vendor?.storeName}</p>
+                                </div>
                                 
-                                <div className="mt-auto">
-                                    <div className="flex items-baseline gap-1 mb-3">
-                                        <span className="text-[10px] text-gray-500 font-bold">{product.currency}</span>
-                                        <span className="text-base font-extrabold text-gray-900">{product.price.toFixed(2)}</span>
-                                    </div>
-
+                                <div className="flex items-center justify-between mt-2">
+                                    <span className="text-sm font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
                                     <button 
-                                        className={`w-full py-2 rounded-md flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-wide transition-all active:scale-95 ${product.stock === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primaryDark shadow-sm hover:shadow-md'}`}
+                                        className={`w-7 h-7 rounded-full flex items-center justify-center text-white transition-all shadow-md active:scale-90 ${product.stock > 0 ? 'bg-black hover:bg-primary' : 'bg-gray-300 cursor-not-allowed'}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if(product.stock > 0) {
-                                                addToCart(product);
-                                                // Could add a toast here
-                                            }
+                                            if(product.stock > 0) addToCart(product);
                                         }}
                                         disabled={product.stock === 0}
                                     >
-                                        <i className="fa-solid fa-cart-plus"></i> Add To Cart
+                                        <i className="fa-solid fa-plus text-xs"></i>
                                     </button>
                                 </div>
                             </div>

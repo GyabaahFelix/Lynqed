@@ -2,18 +2,25 @@
 import { Product, User, Vendor, Category, Order } from './types';
 
 export const CATEGORIES: Category[] = [
-  { id: 'cat-food', name: 'Food', icon: 'utensils' },
-  { id: 'cat-groceries', name: 'Groceries', icon: 'basket-shopping' },
-  { id: 'cat-clothing', name: 'Clothing', icon: 'shirt' },
-  { id: 'cat-sneakers', name: 'Sneakers', icon: 'shoe-prints' },
-  { id: 'cat-beauty', name: 'Beauty', icon: 'spa' },
-  { id: 'cat-electronics', name: 'Electronics', icon: 'bolt' },
-  { id: 'cat-gadgets', name: 'Gadgets', icon: 'mobile-screen' },
-  { id: 'cat-stationery', name: 'Stationery', icon: 'pen-ruler' },
-  { id: 'cat-books', name: 'Books', icon: 'book' },
-  { id: 'cat-decor', name: 'Room Decor', icon: 'couch' },
-  { id: 'cat-services', name: 'Services', icon: 'hand-holding-heart' },
-  { id: 'cat-tickets', name: 'Tickets', icon: 'ticket' },
+  { id: 'cat-food', name: 'Food', icon: 'utensils', image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-groceries', name: 'Groceries', icon: 'basket-shopping', image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-clothing', name: 'Clothing', icon: 'shirt', image: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-sneakers', name: 'Sneakers', icon: 'shoe-prints', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-electronics', name: 'Electronics', icon: 'bolt', image: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-gadgets', name: 'Gadgets', icon: 'mobile-screen', image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-beauty', name: 'Beauty', icon: 'spa', image: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-personal-care', name: 'Personal Care', icon: 'pump-soap', image: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-jewellery', name: 'Jewellery', icon: 'gem', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-home', name: 'Home & Living', icon: 'house-chimney', image: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-decor', name: 'Room Decor', icon: 'couch', image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-stationery', name: 'Stationery', icon: 'pen-ruler', image: 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-books', name: 'Books', icon: 'book', image: 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-sports', name: 'Sports', icon: 'person-running', image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-toys', name: 'Toys', icon: 'gamepad', image: 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-health', name: 'Health', icon: 'heart-pulse', image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-auto', name: 'Auto', icon: 'car', image: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=300&q=80' },
+  { id: 'cat-services', name: 'Services', icon: 'hand-holding-heart', image: 'https://images.unsplash.com/photo-1521791136064-7986c2920216?q=80&w=300&auto=format&fit=crop' },
+  { id: 'cat-tickets', name: 'Tickets', icon: 'ticket', image: 'https://images.unsplash.com/photo-1540221652346-e5dd6b50f3e7?auto=format&fit=crop&w=300&q=80' },
 ];
 
 export const MOCK_USERS: User[] = [
