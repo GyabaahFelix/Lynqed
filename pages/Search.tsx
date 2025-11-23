@@ -136,7 +136,7 @@ export const SearchPage: React.FC = () => {
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search campus, hostels, vendors..."
+                placeholder="Search Products..."
                 className="flex-grow bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400"
             />
              {query && <i className="fa-solid fa-xmark text-gray-400 cursor-pointer p-2 hover:text-red-500 transition-colors" onClick={() => setQuery('')}></i>}
