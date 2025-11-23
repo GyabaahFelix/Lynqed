@@ -80,7 +80,7 @@ export const Welcome: React.FC = () => {
 };
 
 export const BuyerDashboard: React.FC = () => {
-  const { products, vendors, favorites, toggleFavorite, currentUser } = useApp();
+  const { products, vendors, favorites, toggleFavorite, currentUser, addToCart } = useApp();
   const navigate = useNavigate();
   const [selectedCat, setSelectedCat] = useState('All');
   const [sortType, setSortType] = useState<'nearby' | 'price' | 'rating'>('nearby');
@@ -110,7 +110,7 @@ export const BuyerDashboard: React.FC = () => {
   const FilterButton = ({ type, label }: { type: 'nearby'|'price'|'rating', label: string }) => (
       <button 
         onClick={() => setSortType(type)}
-        className={`px-5 py-2.5 rounded-full text-xs font-bold shadow-sm whitespace-nowrap transition-all duration-300 active:scale-95 ${sortType === type ? 'bg-gray-900 text-white shadow-gray-500/30' : 'bg-white text-gray-500 border border-gray-100 hover:bg-gray-50'}`}
+        className={`px-4 py-1.5 rounded-full text-[11px] font-bold shadow-sm whitespace-nowrap transition-all duration-300 active:scale-95 ${sortType === type ? 'bg-gray-900 text-white shadow-gray-500/30' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}
       >
         {label}
       </button>
@@ -127,53 +127,51 @@ export const BuyerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col space-y-6 animate-fade-in pb-4">
+    <div className="flex flex-col space-y-5 animate-fade-in pb-4 bg-gray-50 min-h-screen">
       
       {/* Header Section with Search */}
-      <div className="bg-white/80 backdrop-blur-xl pt-2 pb-4 px-4 sticky top-0 z-30 border-b border-gray-100 shadow-sm">
-        <div className="relative shadow-sm group transform transition-transform active:scale-[0.99]" onClick={() => navigate('/buyer/search')}>
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+      <div className="bg-white/90 backdrop-blur-xl pt-2 pb-3 px-4 sticky top-0 z-30 border-b border-gray-100 shadow-sm">
+        <div className="relative group" onClick={() => navigate('/buyer/search')}>
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <i className="fa-solid fa-magnifying-glass text-gray-400 group-hover:text-primary transition-colors"></i>
             </div>
             <input 
                 readOnly
-                placeholder="Search products, hostels, services..." 
-                className="block w-full rounded-2xl border-none bg-gray-100/70 py-3.5 pl-11 pr-4 text-gray-900 placeholder-gray-500 focus:outline-none cursor-pointer hover:bg-gray-100 transition-colors"
+                placeholder="Search products, brands, categories..." 
+                className="block w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none cursor-pointer hover:bg-white hover:border-primary/30 transition-all"
             />
         </div>
       </div>
 
       {/* Filter Pills */}
       <div className="px-4 -mt-2">
-         <div className="flex gap-3 overflow-x-auto hide-scrollbar py-2 pl-1">
+         <div className="flex gap-2 overflow-x-auto hide-scrollbar py-2">
             <FilterButton type="nearby" label="Nearby" />
-            <FilterButton type="price" label="Price: Low to High" />
+            <FilterButton type="price" label="Low Price" />
             <FilterButton type="rating" label="Top Rated" />
         </div>
       </div>
 
       {/* Hero Banner */}
       <div className="px-4">
-        <div className="relative bg-gradient-to-br from-violet-600 via-primary to-secondary rounded-[2rem] p-7 text-white overflow-hidden shadow-xl shadow-primary/25">
+        <div className="relative bg-gradient-to-br from-gray-900 via-indigo-900 to-gray-900 rounded-2xl p-6 text-white overflow-hidden shadow-lg">
             {/* Decorative elements */}
-            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-16 -mt-10 blur-2xl"></div>
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full -ml-10 -mb-10 blur-2xl"></div>
+            <div className="absolute top-0 right-0 w-40 h-40 bg-primary/30 rounded-full -mr-16 -mt-10 blur-3xl"></div>
             
             <div className="relative z-10 flex justify-between items-center">
-                <div className="max-w-[60%]">
-                    <Badge className="mb-3 bg-white/20 text-white border-white/10 backdrop-blur-md">Earn Cash</Badge>
-                    <h2 className="text-xl font-display font-bold mb-2 leading-tight">Student Entrepreneur?</h2>
-                    <p className="text-indigo-100 text-xs mb-5 font-medium leading-relaxed opacity-90">Start your business on campus today. Reach thousands of students.</p>
+                <div className="max-w-[65%]">
+                    <h2 className="text-lg font-display font-bold mb-1 leading-tight">Student Entrepreneur?</h2>
+                    <p className="text-gray-300 text-xs mb-4 font-medium leading-relaxed">Reach thousands of students on campus today.</p>
                     <button 
                         onClick={handleStartSelling}
-                        className="bg-white text-primary px-6 py-2.5 rounded-xl text-xs font-bold shadow-lg active:scale-95 transition-all hover:bg-gray-50"
+                        className="bg-primary text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all hover:bg-primaryDark"
                     >
                         Start Selling
                     </button>
                 </div>
-                <div className="w-28 h-28 flex items-center justify-center relative">
-                     <div className="absolute inset-0 bg-white/20 rounded-full blur-xl animate-pulse"></div>
-                     <i className="fa-solid fa-rocket text-7xl text-white drop-shadow-2xl relative z-10 animate-bounce-slight"></i>
+                <div className="w-24 h-24 flex items-center justify-center relative">
+                     <i className="fa-solid fa-shop text-6xl text-gray-700/50 absolute transform scale-110"></i>
+                     <i className="fa-solid fa-store text-5xl text-white drop-shadow-2xl relative z-10"></i>
                 </div>
             </div>
         </div>
@@ -181,22 +179,22 @@ export const BuyerDashboard: React.FC = () => {
 
       {/* Categories Scroller */}
       <div className="pl-4">
-        <div className="flex justify-between items-center mb-4 pr-4">
-            <h3 className="font-display font-bold text-gray-900 text-lg">Categories</h3>
+        <div className="flex justify-between items-center mb-3 pr-4">
+            <h3 className="font-display font-bold text-gray-900 text-base">Categories</h3>
         </div>
-        <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-4 pr-4">
+        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 pr-4">
             {categoryList.map(cat => {
                 const isSelected = selectedCat === cat.name;
                 return (
                     <div 
                         key={cat.id} 
-                        className="flex flex-col items-center gap-2 cursor-pointer min-w-[72px] group"
+                        className={`flex flex-col items-center justify-center gap-1 cursor-pointer min-w-[64px] p-2 rounded-xl transition-all duration-300 border ${isSelected ? 'bg-white border-primary shadow-sm' : 'bg-transparent border-transparent hover:bg-white hover:border-gray-100'}`}
                         onClick={() => setSelectedCat(cat.name)}
                     >
-                        <div className={`w-18 h-18 p-4 rounded-2xl flex items-center justify-center transition-all duration-300 border ${isSelected ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105' : 'bg-white border-gray-100 text-gray-400 shadow-sm hover:border-gray-200 hover:bg-gray-50'}`}>
-                            <i className={`fa-solid fa-${cat.icon} text-2xl`}></i>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>
+                            <i className={`fa-solid fa-${cat.icon} text-sm`}></i>
                         </div>
-                        <span className={`text-[11px] font-medium whitespace-nowrap transition-colors ${isSelected ? 'text-primary font-bold' : 'text-gray-500 group-hover:text-gray-800'}`}>
+                        <span className={`text-[10px] font-medium whitespace-nowrap ${isSelected ? 'text-primary font-bold' : 'text-gray-500'}`}>
                             {cat.name}
                         </span>
                     </div>
@@ -206,23 +204,23 @@ export const BuyerDashboard: React.FC = () => {
       </div>
 
       {/* Feed */}
-      <div className="px-4">
-         <div className="flex justify-between items-end mb-5">
-            <h3 className="font-display font-bold text-gray-900 text-lg">
-                {sortType === 'price' ? 'Best Prices' : sortType === 'rating' ? 'Top Rated' : 'Recommended'}
+      <div className="px-3 pb-24">
+         <div className="flex justify-between items-end mb-4 px-1">
+            <h3 className="font-display font-bold text-gray-900 text-base">
+                {sortType === 'price' ? 'Best Deals' : sortType === 'rating' ? 'Top Rated Items' : 'Recommended For You'}
             </h3>
-            {selectedCat !== 'All' && <span className="text-[10px] font-bold text-primary cursor-pointer bg-primary/10 px-3 py-1 rounded-full hover:bg-primary/20 transition-colors" onClick={() => setSelectedCat('All')}>Clear Filter</span>}
+            {selectedCat !== 'All' && <span className="text-[10px] font-bold text-red-500 cursor-pointer bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition-colors" onClick={() => setSelectedCat('All')}>Clear</span>}
          </div>
          
          {filteredProducts.length === 0 ? (
-             <div className="flex flex-col items-center justify-center py-24 text-gray-400 bg-white rounded-[2rem] border-2 border-dashed border-gray-100">
-                 <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                    <i className="fa-solid fa-box-open text-2xl text-gray-300"></i>
+             <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 mx-1">
+                 <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                    <i className="fa-solid fa-box-open text-xl text-gray-300"></i>
                  </div>
-                 <p className="text-sm font-medium">No products found.</p>
+                 <p className="text-xs font-medium">No products found.</p>
              </div>
          ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {filteredProducts.map(product => {
                     const vendor = vendors.find(v => v.vendorId === product.vendorId);
                     // Use first image from array, or fallback
@@ -230,46 +228,58 @@ export const BuyerDashboard: React.FC = () => {
                     const isFav = favorites.includes(product.id);
                     
                     return (
-                        <Card key={product.id} className="flex flex-col h-full group border-0 shadow-card hover:shadow-float relative overflow-hidden" onClick={() => navigate(`/buyer/product/${product.id}`)}>
-                            {/* Image Container - Edge to Edge */}
-                            <div className="h-36 bg-gray-50 relative overflow-hidden">
-                                <img src={mainImage} alt={product.title} className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-110" />
-                                
-                                {/* Favorite Button Overlay */}
-                                <button 
-                                    className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center shadow-sm backdrop-blur-sm transition-all active:scale-90 ${isFav ? 'bg-white/90 text-red-500' : 'bg-white/60 text-gray-500 hover:bg-white hover:text-gray-700'}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleFavorite(product.id);
-                                    }}
-                                >
-                                    <i className={`${isFav ? 'fa-solid' : 'fa-regular'} fa-heart text-xs`}></i>
-                                </button>
-                                
-                                {product.stock < 5 && <span className="absolute bottom-2 left-2 bg-rose-500/90 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-sm">Low Stock</span>}
+                        <div 
+                            key={product.id} 
+                            className="bg-white rounded-lg overflow-hidden border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all duration-300 flex flex-col relative group cursor-pointer" 
+                            onClick={() => navigate(`/buyer/product/${product.id}`)}
+                        >
+                             {/* Fav Button Top Right */}
+                            <button 
+                                className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFavorite(product.id);
+                                }}
+                            >
+                                <i className={`${isFav ? 'fa-solid text-red-500' : 'fa-regular'} fa-heart text-xs`}></i>
+                            </button>
+
+                            {/* Image Container - Contained & Centered */}
+                            <div className="aspect-square w-full p-4 bg-white flex items-center justify-center relative border-b border-gray-50">
+                                <img 
+                                    src={mainImage} 
+                                    alt={product.title} 
+                                    className="max-w-full max-h-full object-contain transition-transform duration-500 group-hover:scale-105" 
+                                />
+                                {product.stock === 0 && <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10"><span className="bg-gray-800 text-white text-[9px] px-2 py-1 font-bold uppercase tracking-wide">Out of Stock</span></div>}
                             </div>
-                            
-                            {/* Content Body - Compact */}
+
+                            {/* Content Body */}
                             <div className="p-3 flex flex-col flex-grow">
-                                <div className="mb-1">
-                                    <h4 className="text-xs font-bold text-gray-900 leading-tight line-clamp-2 font-display">{product.title}</h4>
-                                </div>
-                                <div className="flex items-center text-[10px] text-gray-500 mb-2 gap-1">
-                                    <div className="flex items-center gap-1 max-w-[90px]">
-                                        <span className="font-medium text-gray-400 truncate">{vendor?.storeName}</span>
-                                        {vendor?.isApproved && <i className="fa-solid fa-circle-check text-blue-500 text-[8px] flex-shrink-0" title="Verified Vendor"></i>}
+                                <h3 className="text-xs text-gray-700 font-medium leading-snug line-clamp-2 mb-1 h-[2.4em] group-hover:text-primary transition-colors">{product.title}</h3>
+                                
+                                <div className="mt-auto">
+                                    <div className="flex items-baseline gap-1 mb-3">
+                                        <span className="text-[10px] text-gray-500 font-bold">{product.currency}</span>
+                                        <span className="text-base font-extrabold text-gray-900">{product.price.toFixed(2)}</span>
                                     </div>
-                                    <span className="text-gray-300">•</span>
-                                    <span className="text-primary font-semibold truncate">{product.location}</span>
-                                </div>
-                                <div className="mt-auto flex justify-between items-center pt-2 border-t border-gray-50">
-                                    <span className="text-sm font-extrabold text-gray-900">{product.currency}{product.price}</span>
-                                    <div className="w-7 h-7 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-primary transition-all shadow-lg shadow-gray-900/20 active:scale-90">
-                                        <i className="fa-solid fa-plus text-[10px]"></i>
-                                    </div>
+
+                                    <button 
+                                        className={`w-full py-2 rounded-md flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-wide transition-all active:scale-95 ${product.stock === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primaryDark shadow-sm hover:shadow-md'}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if(product.stock > 0) {
+                                                addToCart(product);
+                                                // Could add a toast here
+                                            }
+                                        }}
+                                        disabled={product.stock === 0}
+                                    >
+                                        <i className="fa-solid fa-cart-plus"></i> Add To Cart
+                                    </button>
                                 </div>
                             </div>
-                        </Card>
+                        </div>
                     )
                 })}
             </div>

@@ -5,9 +5,15 @@ export const CATEGORIES: Category[] = [
   { id: 'cat-food', name: 'Food', icon: 'utensils' },
   { id: 'cat-groceries', name: 'Groceries', icon: 'basket-shopping' },
   { id: 'cat-clothing', name: 'Clothing', icon: 'shirt' },
+  { id: 'cat-sneakers', name: 'Sneakers', icon: 'shoe-prints' },
+  { id: 'cat-beauty', name: 'Beauty', icon: 'spa' },
   { id: 'cat-electronics', name: 'Electronics', icon: 'bolt' },
-  { id: 'cat-services', name: 'Services', icon: 'hand-holding-heart' },
+  { id: 'cat-gadgets', name: 'Gadgets', icon: 'mobile-screen' },
+  { id: 'cat-stationery', name: 'Stationery', icon: 'pen-ruler' },
   { id: 'cat-books', name: 'Books', icon: 'book' },
+  { id: 'cat-decor', name: 'Room Decor', icon: 'couch' },
+  { id: 'cat-services', name: 'Services', icon: 'hand-holding-heart' },
+  { id: 'cat-tickets', name: 'Tickets', icon: 'ticket' },
 ];
 
 export const MOCK_USERS: User[] = [
