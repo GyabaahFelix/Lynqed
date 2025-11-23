@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { Button, Badge, Card, Input } from '../components/UI';
+import { Button, Badge, Card, Input, Avatar } from '../components/UI';
 import { Product } from '../types';
 
 // --- Store Page (Public Vendor Profile) ---
@@ -42,10 +42,11 @@ export const StorePage: React.FC = () => {
               <div className="relative -mt-12 mb-3 flex justify-between items-end">
                   <div className="relative">
                       <div className="w-24 h-24 rounded-2xl bg-white p-1 shadow-md">
-                          <img 
-                              src={vendor.storeAvatarUrl || 'https://via.placeholder.com/100'} 
-                              className="w-full h-full object-cover rounded-xl bg-gray-100" 
-                              alt={vendor.storeName} 
+                          <Avatar 
+                              src={vendor.storeAvatarUrl} 
+                              name={vendor.storeName}
+                              size="xl"
+                              className="rounded-xl bg-gray-100 h-full w-full" 
                           />
                       </div>
                       {vendor.isApproved && (
@@ -285,7 +286,12 @@ export const ProductDetail: React.FC = () => {
                 onClick={() => navigate(`/store/${vendor.vendorId}`)}
             >
                 <div className="relative">
-                    <img src={vendor.storeAvatarUrl || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover border border-white shadow-sm" />
+                    <Avatar 
+                        src={vendor.storeAvatarUrl} 
+                        name={vendor.storeName}
+                        size="md"
+                        className="rounded-full border border-white shadow-sm"
+                    />
                     {vendor.isApproved && (
                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full flex items-center justify-center text-[6px] text-white">
                             <i className="fa-solid fa-check"></i>

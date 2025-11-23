@@ -165,8 +165,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const { data: { user } } = await supabase.auth.getUser();
               if (user && user.user_metadata) {
                   const meta = user.user_metadata;
-                  // Use social provider image if available, else generate initials
-                  const avatar = meta.avatar_url || `https://ui-avatars.com/api/?name=${meta.full_name || 'User'}&background=random`;
+                  // Use social provider image if available, else leave undefined
+                  // This allows the Avatar component to handle initials properly
+                  const avatar = meta.avatar_url || null;
                   
                   const { error: insertError } = await supabase.from('profiles').insert({
                       id: user.id,
@@ -194,8 +195,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setCurrentUser(user);
               
               // FORCE ROLE UPDATE from live data
-              // If user is currently in a role that they still have, keep it. 
-              // Otherwise, reset to default safe role.
               const hasAdmin = user.roles.includes('admin');
               const hasVendor = user.roles.includes('vendor');
               
@@ -300,7 +299,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   id: data.user.id,
                   email: email,
                   name: fullName,
-                  avatarUrl: `https://ui-avatars.com/api/?name=${fullName}&background=random`,
+                  avatarUrl: null, // Allow fallback to Avatar component
                   roles: [role]
               });
               
@@ -339,7 +338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           storeName: data.storeName,
           storeDescription: data.storeDescription,
           location: data.location,
-          storeAvatarUrl: `https://ui-avatars.com/api/?name=${data.storeName}`,
+          storeAvatarUrl: null, // Let avatar component handle it
           contactPhone: data.contactPhone,
           isApproved: true,
           rating: 5.0

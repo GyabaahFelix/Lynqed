@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context';
-import { Button, Input, Card, Badge } from '../components/UI';
+import { Button, Input, Card, Badge, Avatar } from '../components/UI';
 import { CATEGORIES } from '../constants';
 import { OrderStatus, Product } from '../types';
 

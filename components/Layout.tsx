@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { Toast } from './UI';
+import { Toast, Avatar } from './UI';
 
 // --- Bottom Navigation (Mobile First) ---
 export const BottomNav: React.FC = () => {
@@ -108,10 +108,11 @@ export const Navbar: React.FC = () => {
                     onClick={() => setShowDropdown(!showDropdown)}
                     className="flex items-center gap-2 focus:outline-none p-1 pr-3 rounded-full hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all"
                   >
-                    <img 
+                    <Avatar 
                         src={currentUser.avatarUrl} 
-                        alt="Avatar" 
-                        className="h-9 w-9 rounded-full object-cover border-2 border-white shadow-sm bg-gray-100"
+                        name={currentUser.name}
+                        size="sm"
+                        className="border-2 border-white shadow-sm bg-white"
                     />
                     <i className={`fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-300 ${showDropdown ? 'rotate-180' : ''}`}></i>
                   </button>

@@ -1,6 +1,69 @@
 
 import React, { useEffect, useState } from 'react';
 
+// --- Avatar (New Component) ---
+interface AvatarProps {
+  src?: string | null;
+  name: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  className?: string;
+  onClick?: () => void;
+}
+
+export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', className = '', onClick }) => {
+  const [imgError, setImgError] = useState(false);
+
+  // Reset error state if src changes
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
+  const initials = name
+    ? name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+    : '?';
+
+  // Size mappings
+  const sizeClasses = {
+    sm: "w-8 h-8 text-[10px]",
+    md: "w-10 h-10 text-xs",
+    lg: "w-14 h-14 text-sm",
+    xl: "w-24 h-24 text-xl",
+    '2xl': "w-32 h-32 text-3xl"
+  };
+
+  // Deterministic color based on name length (simple consistent coloring)
+  const colors = [
+    'bg-blue-100 text-blue-600',
+    'bg-green-100 text-green-600',
+    'bg-yellow-100 text-yellow-600',
+    'bg-purple-100 text-purple-600',
+    'bg-pink-100 text-pink-600',
+    'bg-indigo-100 text-indigo-600',
+  ];
+  const colorIndex = name.length % colors.length;
+  const colorClass = colors[colorIndex];
+
+  const baseClasses = `rounded-full flex items-center justify-center font-bold object-cover shadow-sm border border-white flex-shrink-0 ${sizeClasses[size]} ${className}`;
+
+  if (src && !imgError) {
+    return (
+      <img 
+        src={src} 
+        alt={name} 
+        className={`${baseClasses} bg-gray-100`}
+        onError={() => setImgError(true)}
+        onClick={onClick}
+      />
+    );
+  }
+
+  return (
+    <div className={`${baseClasses} ${colorClass}`} onClick={onClick} title={name}>
+      {initials}
+    </div>
+  );
+};
+
 // --- Button ---
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';

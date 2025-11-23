@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context';
-import { Button, Card, Input, Badge } from '../components/UI';
+import { Button, Card, Input, Badge, Avatar } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
 
 export const UserProfile: React.FC = () => {
@@ -52,7 +52,14 @@ export const UserProfile: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50 pb-24">
             <div className="bg-white p-6 pb-10 rounded-b-3xl shadow-sm text-center">
-                <img src={currentUser.avatarUrl} className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-blue-50" />
+                <div className="flex justify-center mb-4">
+                    <Avatar 
+                        src={currentUser.avatarUrl} 
+                        name={currentUser.name} 
+                        size="xl" 
+                        className="border-4 border-blue-50" 
+                    />
+                </div>
                 <h1 className="text-xl font-bold text-gray-900">{currentUser.name}</h1>
                 <p className="text-gray-500 text-sm">{currentUser.email}</p>
                 <div className="mt-4 flex justify-center gap-2">
