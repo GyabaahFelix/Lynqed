@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
+import { Toast } from './UI';
 
 // --- Bottom Navigation (Mobile First) ---
 export const BottomNav: React.FC = () => {
@@ -139,16 +140,28 @@ export const Navbar: React.FC = () => {
                                 </Link>
                                 
                                 {currentRole === 'buyer' && (
-                                    <Link 
-                                      to="/buyer/orders" 
-                                      className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
-                                      onClick={() => setShowDropdown(false)}
-                                    >
-                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
-                                            <i className="fa-solid fa-box-open"></i>
-                                        </div>
-                                        My Orders
-                                    </Link>
+                                    <>
+                                        <Link 
+                                        to="/buyer/orders" 
+                                        className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
+                                        onClick={() => setShowDropdown(false)}
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
+                                                <i className="fa-solid fa-box-open"></i>
+                                            </div>
+                                            My Orders
+                                        </Link>
+                                        <Link 
+                                        to="/buyer/wishlist" 
+                                        className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
+                                        onClick={() => setShowDropdown(false)}
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
+                                                <i className="fa-solid fa-heart"></i>
+                                            </div>
+                                            Wishlist
+                                        </Link>
+                                    </>
                                 )}
 
                                 {currentRole === 'vendor' && (
@@ -192,7 +205,7 @@ export const Navbar: React.FC = () => {
 };
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentRole } = useApp();
+  const { currentRole, toast, hideToast } = useApp();
   const location = useLocation();
   const isSearchPage = location.pathname === '/buyer/search';
   const isWelcome = location.pathname === '/';
@@ -203,7 +216,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isBottomNavVisible = !(currentRole === 'admin' || isSearchPage || isWelcome || isProductDetail || isCheckout);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans text-slate-800">
+    <div className="min-h-screen bg-background flex flex-col font-sans text-slate-800 relative">
+      <Toast toast={toast} onClose={hideToast} />
+
       {!isSearchPage && !isWelcome && <Navbar />}
       
       <main className={`flex-grow flex flex-col ${isBottomNavVisible ? 'pb-[90px]' : ''}`}>

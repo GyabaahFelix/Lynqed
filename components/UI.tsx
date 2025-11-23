@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useEffect, useState } from 'react';
 
 // --- Button ---
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -94,3 +95,47 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; onC
 export const Spinner: React.FC = () => (
     <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-200 border-b-primary"></div>
 );
+
+// --- Toast Notification ---
+export interface ToastMessage {
+    message: string;
+    type: 'success' | 'error' | 'info';
+}
+
+export const Toast: React.FC<{ toast: ToastMessage | null; onClose: () => void }> = ({ toast, onClose }) => {
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        if (toast) {
+            setVisible(true);
+            const timer = setTimeout(() => {
+                setVisible(false);
+                setTimeout(onClose, 300); // Wait for animation
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast, onClose]);
+
+    if (!toast) return null;
+
+    const icons = {
+        success: 'circle-check',
+        error: 'circle-exclamation',
+        info: 'circle-info'
+    };
+
+    const colors = {
+        success: 'bg-gray-900 text-white',
+        error: 'bg-red-500 text-white',
+        info: 'bg-blue-500 text-white'
+    };
+
+    return (
+        <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-in-out ${visible ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0'}`}>
+            <div className={`flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl ${colors[toast.type]} min-w-[200px] max-w-xs`}>
+                <i className={`fa-solid fa-${icons[toast.type]}`}></i>
+                <span className="text-sm font-bold tracking-wide">{toast.message}</span>
+            </div>
+        </div>
+    );
+};

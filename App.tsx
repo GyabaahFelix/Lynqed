@@ -8,7 +8,7 @@ import { SearchPage } from './pages/Search';
 import { ProductDetail, Cart, Checkout, StorePage } from './pages/Product';
 import { VendorDashboard, VendorProducts, AddProduct, EditProduct, VendorOrders, VendorOnboarding } from './pages/Vendor';
 import { AdminDashboard } from './pages/Admin';
-import { UserProfile, OrdersPage } from './pages/Profile';
+import { UserProfile, OrdersPage, WishlistPage } from './pages/Profile';
 import { Login, Register, AdminLogin } from './pages/Auth';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
@@ -43,6 +43,7 @@ const AppContent = () => {
         <Route path="/buyer/cart" element={<Cart />} />
         <Route path="/buyer/checkout" element={<Checkout />} />
         <Route path="/buyer/orders" element={<ProtectedRoute role="buyer"><OrdersPage /></ProtectedRoute>} />
+        <Route path="/buyer/wishlist" element={<ProtectedRoute role="buyer"><WishlistPage /></ProtectedRoute>} />
         <Route path="/buyer/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
 
         {/* Vendor Routes */}

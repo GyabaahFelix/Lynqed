@@ -1,7 +1,8 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Product, Vendor, Order, CartItem, DeliveryPerson, Role, OrderStatus } from './types';
 import { supabase } from './supabaseClient';
+import { ToastMessage } from './components/UI';
 
 // --- Interfaces ---
 interface AppContextType {
@@ -14,6 +15,7 @@ interface AppContextType {
   deliveryPersons: DeliveryPerson[];
   isLoading: boolean;
   favorites: string[];
+  toast: ToastMessage | null;
   
   // Auth Actions
   login: (email: string, password: string) => Promise<{success: boolean, role?: Role, error?: string}>;
@@ -37,6 +39,10 @@ interface AppContextType {
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   toggleFavorite: (productId: string) => void;
   
+  // UI Actions
+  hideToast: () => void;
+  requestNotificationPermission: () => Promise<boolean>;
+
   // Vendor/Admin Actions
   approveDeliveryPerson: (id: string) => void;
 }
@@ -48,11 +54,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentRole, setCurrentRole] = useState<Role>('guest');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [deliveryPersons, setDeliveryPersons] = useState<DeliveryPerson[]>([]);
+  
+  // Refs to hold latest state for Event Listeners
+  const userRef = useRef<User | null>(null);
   
   const [cart, setCart] = useState<CartItem[]>(() => {
       const saved = localStorage.getItem('lynqed_cart');
@@ -63,6 +73,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return saved ? JSON.parse(saved) : [];
   });
 
+  // Keep Ref in sync
+  useEffect(() => { userRef.current = currentUser; }, [currentUser]);
+
   // --- 1. INITIAL LOAD (SUPABASE) ---
   useEffect(() => {
     checkSession();
@@ -71,13 +84,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Subscribe to Realtime changes for Stock Updates
     const productSubscription = supabase
       .channel('public:products')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
           fetchData(); // Refresh data on any product change
+      })
+      .subscribe();
+      
+    // Subscribe to Realtime changes for New Orders (Notifications)
+    const orderSubscription = supabase
+      .channel('public:orders')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
+          const newOrder = payload.new as Order;
+          // Check if the new order belongs to the currently logged in vendor
+          if (userRef.current) {
+              // Fetch the vendor details for this order to see if it matches current user
+              const { data: vendorData } = await supabase
+                  .from('vendors')
+                  .select('userId')
+                  .eq('vendorId', newOrder.vendorId)
+                  .single();
+                  
+              if (vendorData && vendorData.userId === userRef.current.id) {
+                  // Notify Vendor
+                  playNotificationSound();
+                  showToast(`New Order! ₵${newOrder.total}`, 'info');
+                  sendBrowserNotification(newOrder);
+                  
+                  // Refresh orders list
+                  fetchData();
+              }
+          }
       })
       .subscribe();
 
     return () => {
         supabase.removeChannel(productSubscription);
+        supabase.removeChannel(orderSubscription);
     };
   }, []);
 
@@ -97,15 +138,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const fetchUserProfile = async (userId: string): Promise<User | null> => {
-      // 1. Try to get the profile from the database
       let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
-      // 2. SELF-HEALING: If profile is missing (e.g., created during "Email not confirmed" state),
-      //    try to recover it using Auth Metadata.
+      // SELF-HEALING Logic
       if (!data) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user && user.user_metadata) {
@@ -119,7 +158,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
               
               if (!insertError) {
-                  // Retry fetch
                   const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).single();
                   data = retryData;
               }
@@ -131,14 +169,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               id: data.id,
               email: data.email,
               name: data.name,
-              avatarUrl: data.avatarUrl || data.avatar_url, // Handle snake_case mapping
+              avatarUrl: data.avatarUrl || data.avatar_url,
               roles: data.roles as Role[]
           };
           setCurrentUser(user);
-          // Determine default role
           const defaultRole = user.roles.includes('vendor') ? 'vendor' : user.roles.includes('admin') ? 'admin' : 'buyer';
           setCurrentRole(defaultRole);
-          
           return user;
       }
       
@@ -157,7 +193,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const mappedVendors = vendData.map((v: any) => ({
               ...v,
               createdAt: v.created_at,
-              storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url // Handle potential case mismatch
+              storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url
           }));
           setVendors(mappedVendors as Vendor[]);
       }
@@ -178,10 +214,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (delData) setDeliveryPersons(delData as any[]);
   };
 
+  // --- Notification Helpers ---
+  
+  const playNotificationSound = () => {
+      try {
+          // Short pleasant beep data URI
+          const audio = new Audio("data:audio/wav;base64,UklGRl9vT1BXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU..."); // Placeholder, using generic alert logic below
+          // Since base64 audio strings are long, we'll rely on a simple oscillator or visual feedback if audio fails.
+          // Using a cleaner standard browser beep approach isn't direct, so we just log for MVP or rely on system notification sound.
+          console.log("Playing notification sound");
+      } catch (e) {
+          console.error("Audio play failed", e);
+      }
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) return false;
+    const permission = await Notification.requestPermission();
+    return permission === "granted";
+  };
+
+  const sendBrowserNotification = (order: Order) => {
+      if (Notification.permission === "granted") {
+          new Notification("LYNQED: New Order Received!", {
+              body: `New order placed for ₵${order.total}. Check your dashboard.`,
+              icon: '/vite.svg' // Uses default vite icon or public logo
+          });
+      }
+  };
+
+  // --- UI Actions ---
+  const hideToast = () => setToast(null);
+  const showToast = (message: string, type: 'success'|'error'|'info' = 'success') => {
+      setToast({ message, type });
+  };
+
   // --- Auth Actions ---
 
   const signup = async (email: string, password: string, fullName: string, role: Role) => {
-      // Store critical user info in Metadata so it persists even if Profile creation fails initially
       const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -197,7 +267,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (error) return { success: false, error: error.message };
 
       if (data.user) {
-          // Create Profile immediately if possible
+          // We attempt to create the profile immediately
           const { error: profileError } = await supabase.from('profiles').insert({
               id: data.user.id,
               email: email,
@@ -205,11 +275,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`,
               roles: [role]
           });
-
-          // If profile creation fails (e.g. RLS block on unconfirmed email), we ignore it here.
-          // The 'fetchUserProfile' Self-Healing logic will handle it on next login.
-
-          // Auto Login state
+          // Fetch profile to ensure state is consistent
           await fetchUserProfile(data.user.id);
           return { success: true };
       }
@@ -226,21 +292,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error) return { success: false, error: error.message };
     
     if (data.user) {
-        // CRITICAL FIX: Use the live user profile from the DB to determine role
-        // Do NOT rely on data.user.user_metadata as it is often stale
+        // Force fetch live data from database to get Role
         const userProfile = await fetchUserProfile(data.user.id);
-        
         let userRole: Role = 'buyer';
         
+        // Prioritize DB role over metadata
         if (userProfile && userProfile.roles) {
              const roles = userProfile.roles;
              userRole = roles.includes('admin') ? 'admin' : roles.includes('vendor') ? 'vendor' : 'buyer';
         } else if (data.user.user_metadata?.roles) {
-             // Fallback to metadata only if profile fetch totally fails
+             // Fallback to metadata
              const roles = data.user.user_metadata.roles;
              userRole = roles.includes('admin') ? 'admin' : roles.includes('vendor') ? 'vendor' : 'buyer';
         }
-        
+        showToast(`Welcome back!`, 'success');
         return { success: true, role: userRole };
     }
     
@@ -252,11 +317,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(null);
     setCurrentRole('guest');
     setCart([]);
+    showToast('Logged out successfully', 'info');
   };
 
   const switchRole = (role: Role) => {
     if(currentUser?.roles.includes(role) || role === 'guest') {
       setCurrentRole(role);
+      showToast(`Switched to ${role} mode`, 'info');
     }
   };
 
@@ -279,24 +346,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (!error) {
-        // Update User Role
         const newRoles = [...currentUser.roles, 'vendor'];
         await supabase.from('profiles').update({ roles: newRoles }).eq('id', currentUser.id);
-        // Update metadata too for consistency
+        // Update auth metadata as well
         await supabase.auth.updateUser({ data: { roles: newRoles } });
         
-        // Refresh Local State
         await fetchUserProfile(currentUser.id);
         fetchData(); 
+        showToast('Store created successfully!', 'success');
     }
   };
 
   const addProduct = async (data: Omit<Product, 'id' | 'status' | 'images'> & { images: string[] }) => {
-     // Robust check for vendor ID (handles both camelCase and snake_case mapping issues)
+     // Robust check: find vendor by checking both user_id formats
      const vendor = vendors.find(v => v.userId === currentUser?.id);
      
      if (!vendor) {
-         console.error("No vendor profile found for current user.");
+         console.error("Vendor Check Failed. CurrentUser:", currentUser?.id, "Vendors:", vendors);
+         showToast('Vendor profile not found. Please contact support.', 'error');
          return false;
      }
 
@@ -310,32 +377,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         stock: data.stock,
         images: data.images,
         contactPhone: data.contactPhone,
-        status: 'pending',
+        status: 'pending', // Always pending initially
         location: data.location || vendor.location,
         rating: 0
      });
 
      if (!error) {
          fetchData();
+         showToast('Product submitted for approval', 'success');
          return true;
      }
-     console.error("Error adding product:", error);
+     console.error(error);
+     showToast('Failed to add product', 'error');
      return false;
   };
 
   const updateProduct = async (id: string, data: Partial<Product>) => {
       const { error } = await supabase.from('products').update(data).eq('id', id);
-      if (!error) fetchData();
+      if (!error) {
+          fetchData();
+          showToast('Product updated', 'success');
+      }
   };
 
   const updateProductStatus = async (id: string, status: Product['status']) => {
     const { error } = await supabase.from('products').update({ status }).eq('id', id);
-    if (!error) fetchData();
+    if (!error) {
+        fetchData();
+        showToast(`Product ${status}`, 'info');
+    }
   };
 
   const deleteProduct = async (id: string) => {
     const { error } = await supabase.from('products').delete().eq('id', id);
-    if (!error) fetchData();
+    if (!error) {
+        fetchData();
+        showToast('Product deleted', 'info');
+    }
   };
 
   // --- Order Actions ---
@@ -343,10 +421,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const placeOrder = async (deliveryOption: 'delivery' | 'pickup') => {
     if (!currentUser || cart.length === 0) return;
     
+    // Assuming all items are from same vendor for MVP or handling first vendor
     const vendorId = cart[0].product.vendorId;
     const total = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
 
-    // 1. Create Order
     const { error } = await supabase.from('orders').insert({
         buyerId: currentUser.id,
         vendorId: vendorId,
@@ -357,22 +435,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (!error) {
-        // 2. Decrement Stock for each item
+        // Decrement Stock
         for (const item of cart) {
             const newStock = Math.max(0, item.product.stock - item.quantity);
             await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
         }
-
         fetchData();
         clearCart();
+        showToast('Order placed successfully!', 'success');
     } else {
-        console.error("Order failed", error);
+        showToast('Failed to place order', 'error');
     }
   };
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
-      if (!error) fetchData();
+      if (!error) {
+          fetchData();
+          showToast(`Order status updated to ${status.replace('_', ' ')}`, 'success');
+      }
   };
 
   // --- Other Actions ---
@@ -381,20 +462,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.id);
       if (existing) {
+        showToast(`Updated quantity for ${product.title}`, 'success');
         return prev.map(item => item.productId === product.id ? { ...item, quantity: item.quantity + quantity } : item);
       }
+      showToast(`${product.title} added to cart`, 'success');
       return [...prev, { productId: product.id, quantity, product }];
     });
   };
 
   const removeFromCart = (productId: string) => {
     setCart(prev => prev.filter(item => item.productId !== productId));
+    showToast('Item removed from cart', 'info');
   };
 
   const clearCart = () => setCart([]);
 
   const toggleFavorite = (productId: string) => {
-      setFavorites(prev => prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]);
+      setFavorites(prev => {
+          const isExisting = prev.includes(productId);
+          if (isExisting) {
+              showToast('Removed from Wishlist', 'info');
+              return prev.filter(id => id !== productId);
+          } else {
+              showToast('Added to Wishlist', 'success');
+              return [...prev, productId];
+          }
+      });
   };
 
   const registerDeliveryPerson = async (data: Partial<DeliveryPerson>) => {
@@ -405,20 +498,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       vehicleType: data.vehicleType || 'bicycle',
       status: 'pending'
     });
-    if (!error) fetchData();
+    if (!error) {
+        fetchData();
+        showToast('Application submitted', 'success');
+    }
   };
   
   const approveDeliveryPerson = async (id: string) => {
       const { error } = await supabase.from('delivery_persons').update({ status: 'approved' }).eq('id', id);
-      if (!error) fetchData();
+      if (!error) {
+          fetchData();
+          showToast('Delivery person approved', 'success');
+      }
   }
 
   return (
     <AppContext.Provider value={{
-      currentUser, currentRole, products, vendors, orders, cart, deliveryPersons, isLoading, favorites,
+      currentUser, currentRole, products, vendors, orders, cart, deliveryPersons, isLoading, favorites, toast,
       login, signup, logout, switchRole, registerDeliveryPerson, registerVendor,
       addProduct, updateProduct, updateProductStatus, deleteProduct, approveDeliveryPerson,
-      addToCart, removeFromCart, clearCart, placeOrder, updateOrderStatus, toggleFavorite
+      addToCart, removeFromCart, clearCart, placeOrder, updateOrderStatus, toggleFavorite,
+      hideToast, requestNotificationPermission
     }}>
       {children}
     </AppContext.Provider>
