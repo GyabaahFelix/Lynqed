@@ -126,16 +126,27 @@ export const VendorProducts: React.FC = () => {
 }
 
 export const VendorOrders: React.FC = () => {
-    const { orders, updateOrderStatus, vendors, currentUser, refreshData } = useApp();
+    const { orders, updateOrderStatus, vendors, currentUser, refreshData, isLoading } = useApp();
     const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+    const [refreshing, setRefreshing] = useState(false);
 
     // Force refresh on mount to ensure orders are seen
     useEffect(() => {
         refreshData();
     }, []);
 
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        await refreshData();
+        setTimeout(() => setRefreshing(false), 500);
+    };
+
     const currentVendor = vendors.find(v => v.userId === currentUser?.id);
-    const myOrders = orders.filter(o => o.vendorId === currentVendor?.vendorId);
+    
+    // Debug info to show if vendor ID is missing
+    const vendorId = currentVendor?.vendorId;
+
+    const myOrders = orders.filter(o => o.vendorId === vendorId);
 
     const filteredOrders = myOrders.filter(o => {
         if (filter === 'all') return true;
@@ -166,8 +177,18 @@ export const VendorOrders: React.FC = () => {
 
     return (
         <div className="p-4 min-h-screen bg-gray-50 pb-24 animate-fade-in pb-safe">
-            <div className="mb-6">
-                <h1 className="text-xl font-bold text-gray-900">Orders Management</h1>
+            <div className="mb-4 flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                    <h1 className="text-xl font-bold text-gray-900">Orders Management</h1>
+                    <Button size="sm" variant="outline" onClick={handleRefresh} icon="rotate">
+                        {refreshing ? 'Refreshing...' : 'Check for Orders'}
+                    </Button>
+                </div>
+                {/* Debug / Status Info */}
+                <div className="flex items-center gap-2 text-[10px] text-gray-400 bg-white p-2 rounded-lg border border-gray-100">
+                    <span className={`w-2 h-2 rounded-full ${vendorId ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    Status: {vendorId ? `Connected (${vendorId})` : 'Vendor Profile Not Found'}
+                </div>
             </div>
 
             <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar">
@@ -189,6 +210,8 @@ export const VendorOrders: React.FC = () => {
                             <i className="fa-solid fa-clipboard-list text-2xl text-gray-300"></i>
                         </div>
                         <p className="text-gray-400 font-medium text-sm">No {filter} orders found.</p>
+                        {filter === 'active' && <p className="text-[10px] text-gray-300 mt-1">New orders will appear here automatically.</p>}
+                        <Button size="sm" variant="ghost" onClick={handleRefresh} className="mt-2">Refresh List</Button>
                     </div>
                 ) : (
                     filteredOrders.map(order => {

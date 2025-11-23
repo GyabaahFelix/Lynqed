@@ -109,9 +109,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   .select('*')
                   .eq('vendorId', newOrder.vendorId)
                   .single();
-                  
-              // Handle snake_case vs camelCase mapping if needed
-              const vUserId = vendorData?.userId || vendorData?.user_id;
+              
+              // Map properly regardless of column case
+              const vUserId = vendorData?.userId;
 
               if (vUserId && vUserId === userRef.current.id) {
                   // Notify Vendor
@@ -185,12 +185,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   id: data.id,
                   email: data.email,
                   name: data.name,
-                  avatarUrl: data.avatarUrl || data.avatar_url,
+                  avatarUrl: data.avatarUrl,
                   roles: data.roles as Role[]
               };
               setCurrentUser(user);
-              const defaultRole = user.roles.includes('vendor') ? 'vendor' : user.roles.includes('admin') ? 'admin' : 'buyer';
-              setCurrentRole(defaultRole);
+              
+              // FORCE ROLE UPDATE from live data
+              // If user is currently in a role that they still have, keep it. 
+              // Otherwise, reset to default safe role.
+              const hasAdmin = user.roles.includes('admin');
+              const hasVendor = user.roles.includes('vendor');
+              
+              if(hasAdmin && currentRole === 'admin') {
+                  // Keep admin
+              } else if (hasVendor && currentRole === 'vendor') {
+                  // Keep vendor
+              } else {
+                   // Default fallback
+                   const defaultRole = hasVendor ? 'vendor' : hasAdmin ? 'admin' : 'buyer';
+                   setCurrentRole(defaultRole);
+              }
               
               setIsLoading(false);
               return user;
@@ -208,29 +222,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Fetch Products
           const { data: prodData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
           if (prodData) {
-              const mappedProducts = prodData.map((p: any) => ({
-                  ...p,
-                  vendorId: p.vendorId || p.vendor_id,
-                  contactPhone: p.contactPhone || p.contact_phone
-              }));
-              setProducts(mappedProducts as Product[]);
+              setProducts(prodData as Product[]);
           }
 
           // Fetch Vendors
           const { data: vendData } = await supabase.from('vendors').select('*');
           if (vendData) {
-              const mappedVendors = vendData.map((v: any) => ({
-                  ...v,
-                  vendorId: v.vendorId || v.vendor_id,
-                  userId: v.userId || v.user_id,
-                  storeName: v.storeName || v.store_name,
-                  storeDescription: v.storeDescription || v.store_description,
-                  storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url,
-                  isApproved: v.isApproved !== undefined ? v.isApproved : v.is_approved,
-                  createdAt: v.created_at,
-                  contactPhone: v.contactPhone || v.contact_phone
-              }));
-              setVendors(mappedVendors as Vendor[]);
+              setVendors(vendData as Vendor[]);
           }
 
           // Fetch Orders
@@ -238,10 +236,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (ordData) {
              const mappedOrders = ordData.map((o: any) => ({
                  ...o,
-                 buyerId: o.buyerId || o.buyer_id,
-                 vendorId: o.vendorId || o.vendor_id,
-                 deliveryOption: o.deliveryOption || o.delivery_option,
-                 createdAt: o.created_at,
                  // Ensure items is parsed if string
                  items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
              }));
@@ -251,13 +245,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Fetch Delivery Persons
           const { data: delData } = await supabase.from('delivery_persons').select('*');
           if (delData) {
-              const mappedDel = delData.map((d: any) => ({
-                  ...d,
-                  userId: d.userId || d.user_id,
-                  fullName: d.fullName || d.full_name,
-                  vehicleType: d.vehicleType || d.vehicle_type
-              }));
-              setDeliveryPersons(mappedDel as DeliveryPerson[]);
+              setDeliveryPersons(delData as DeliveryPerson[]);
           }
       } catch (e) {
           console.error("Data fetch error", e);
@@ -271,14 +259,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (error) throw error;
           
           if (data.user) {
-              // 1. Fetch Profile and set Current User
+              // 1. Fetch Profile to get LIVE roles
               const user = await fetchUserProfile(data.user.id);
               
-              // 2. CRITICAL: Refresh Data to ensure vendor mapping works for the new user
+              // 2. Refresh Data
               await fetchData();
 
               if (user) {
-                   // Check for admin role in the LIVE database profile
                    if (user.roles.includes('admin')) return { success: true, role: 'admin' };
                    if (user.roles.includes('vendor')) return { success: true, role: 'vendor' };
                    return { success: true, role: 'buyer' };
@@ -304,7 +291,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
           if (error) throw error;
           
-          // Try to create profile immediately if possible (but don't block if RLS prevents it before confirm)
+          // Try to create profile immediately
           if (data.user) {
                await supabase.from('profiles').insert({
                   id: data.user.id,
@@ -342,6 +329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Store Actions ---
   const registerVendor = async (data: any) => {
       if (!currentUser) return;
+      
       const newVendor = {
           vendorId: `vendor-${Date.now()}`,
           userId: currentUser.id,
@@ -354,16 +342,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           rating: 5.0
       };
       
-      // Save to Supabase
+      // Save to Supabase using EXACT column names
       const { error } = await supabase.from('vendors').insert({
           vendorId: newVendor.vendorId,
-          user_id: newVendor.userId, // snake_case for DB
+          userId: newVendor.userId,
           storeName: newVendor.storeName,
           storeDescription: newVendor.storeDescription,
           storeAvatarUrl: newVendor.storeAvatarUrl,
           location: newVendor.location,
           contactPhone: newVendor.contactPhone,
-          isApproved: true
+          isApproved: true,
+          rating: 5.0
       });
 
       if (!error) {
@@ -391,9 +380,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const { error } = await supabase.from('products').insert({
-          vendorId: myVendor.vendorId, // camelCase here maps to column if defined with quotes, else user snake_case if needed.
-          // Using snake_case for DB columns mostly:
-          vendor_id: myVendor.vendorId, 
+          vendorId: myVendor.vendorId, 
           title: productData.title,
           description: productData.description,
           price: productData.price,
@@ -401,7 +388,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           category: productData.category,
           images: productData.images,
           stock: productData.stock,
-          status: 'pending', // Pending by default
+          status: 'pending',
           location: productData.location,
           contactPhone: productData.contactPhone,
           rating: 0
@@ -476,15 +463,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const total = items.reduce((sum, i) => sum + (i.product.price * i.quantity), 0);
           
           await supabase.from('orders').insert({
-              buyerId: currentUser ? currentUser.id : 'guest', // Handle guest logic if needed
-              buyer_id: currentUser ? currentUser.id : null, // DB column
+              buyerId: currentUser ? currentUser.id : 'guest', // Will fail if UUID constraint exists and this isn't UUID
               vendorId: vendorId,
-              vendor_id: vendorId, // DB column
               items: items, // JSONB
               total: total + (deliveryOption === 'delivery' ? 10 : 0),
               status: 'placed',
-              deliveryOption: deliveryOption,
-              delivery_option: deliveryOption
+              deliveryOption: deliveryOption
           });
 
           // Decrement Stock
@@ -521,11 +505,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!currentUser) return;
       await supabase.from('delivery_persons').insert({
           userId: currentUser.id,
-          user_id: currentUser.id,
           fullName: data.fullName,
-          full_name: data.fullName,
           vehicleType: data.vehicleType,
-          vehicle_type: data.vehicleType,
           status: 'pending'
       });
       fetchData();
