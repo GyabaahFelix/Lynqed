@@ -11,6 +11,23 @@ declare global {
     }
 }
 
+// Initial Cache with Major Cities (Speed Optimization)
+const INITIAL_LOCATION_CACHE: Record<string, [number, number]> = {
+    'legon': [5.6506, -0.1962],
+    'university of ghana': [5.6506, -0.1962],
+    'campus': [5.6506, -0.1962],
+    'tema': [5.6698, 0.0166],
+    'accra': [5.6037, -0.1870],
+    'kumasi': [6.6885, -1.6244],
+    'cape coast': [5.1315, -1.2795],
+    'takoradi': [4.9016, -1.7831],
+    'tamale': [9.4075, -0.8534],
+    'kasoa': [5.5345, -0.4168],
+    'ho': [6.6101, 0.4785],
+    'sunyani': [7.3399, -2.3268],
+    'koforidua': [6.0903, -0.2591]
+};
+
 export const SearchPage: React.FC = () => {
   const { products, vendors } = useApp();
   const navigate = useNavigate();
@@ -19,40 +36,71 @@ export const SearchPage: React.FC = () => {
   
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const markersLayerRef = useRef<any>(null); // Reference to the layer group holding markers
+  const markersLayerRef = useRef<any>(null); 
+  const coordCache = useRef<Record<string, [number, number]>>(INITIAL_LOCATION_CACHE);
   
   const approvedProducts = products.filter(p => 
     p.status === 'approved' && 
     p.title.toLowerCase().includes(query.toLowerCase())
   );
 
-  // 1. Initialize Map (Run ONCE)
+  // Helper: Fetch Coordinates dynamically
+  const getCoordinates = async (locationName: string): Promise<[number, number]> => {
+      const cleanName = locationName.toLowerCase().trim();
+      
+      // 1. Check Cache (Exact Match)
+      if (coordCache.current[cleanName]) return coordCache.current[cleanName];
+
+      // 2. Check Cache (Partial Match)
+      const partialKey = Object.keys(coordCache.current).find(k => cleanName.includes(k));
+      if (partialKey) return coordCache.current[partialKey];
+
+      // 3. Fetch from OpenStreetMap (Nominatim)
+      try {
+          // We append "Ghana" to context to ensure we don't get a town in another country
+          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}, Ghana`);
+          const data = await response.json();
+
+          if (data && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lon = parseFloat(data[0].lon);
+              const coords: [number, number] = [lat, lon];
+              
+              // Save to cache so we don't fetch again this session
+              coordCache.current[cleanName] = coords;
+              return coords;
+          }
+      } catch (e) {
+          console.warn(`Geocoding failed for ${locationName}`, e);
+      }
+
+      // 4. Fallback to Legon/Campus if totally unknown
+      return INITIAL_LOCATION_CACHE['legon'];
+  };
+
+  // 1. Initialize Map
   useEffect(() => {
       if (!mapContainerRef.current || mapInstanceRef.current) return;
 
       if (window.L) {
-        // Default Center: University of Ghana, Legon (Example Campus)
-        const defaultCenter = [5.6506, -0.1962]; 
+        const defaultCenter = [5.6037, -0.1870]; 
         
         const map = window.L.map(mapContainerRef.current, {
             zoomControl: false,
             attributionControl: false
-        }).setView(defaultCenter, 15);
+        }).setView(defaultCenter, 13);
 
-        // Light Map Style
         window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            attribution: '&copy; OpenStreetMap',
             subdomains: 'abcd',
             maxZoom: 20
         }).addTo(map);
 
-        // Create a LayerGroup to hold markers (allows clearing them without destroying the map)
         const markersLayer = window.L.layerGroup().addTo(map);
         markersLayerRef.current = markersLayer;
         mapInstanceRef.current = map;
       }
 
-      // Cleanup on unmount
       return () => {
           if (mapInstanceRef.current) {
               mapInstanceRef.current.remove();
@@ -62,73 +110,82 @@ export const SearchPage: React.FC = () => {
       };
   }, []); 
 
-  // 2. Update Markers (Run when vendors change)
+  // 2. Plot Vendors Async
   useEffect(() => {
       if (!mapInstanceRef.current || !markersLayerRef.current || !window.L) return;
 
-      // Clear existing markers before adding new ones
-      markersLayerRef.current.clearLayers();
-
-      const defaultCenter = [5.6506, -0.1962];
       const map = mapInstanceRef.current;
+      const markersLayer = markersLayerRef.current;
+      
+      const plotVendors = async () => {
+          markersLayer.clearLayers();
+          const markersArray: any[] = [];
+          const activeVendors = vendors.filter(v => v.isApproved);
 
-      vendors.filter(v => v.isApproved).forEach((v, index) => {
-            // Simulate scattered locations around campus for demo purposes
-            const latOffset = (Math.sin(index + 1) * 0.005); 
-            const lngOffset = (Math.cos(index + 1) * 0.005);
-            const position = [defaultCenter[0] + latOffset, defaultCenter[1] + lngOffset];
+          for (const v of activeVendors) {
+                // Async fetch of real coordinates
+                const baseCoords = await getCoordinates(v.location);
+                
+                // Add tiny jitter so pins don't overlap exactly
+                const jitterLat = (Math.random() - 0.5) * 0.002;
+                const jitterLng = (Math.random() - 0.5) * 0.002;
+                const position = [baseCoords[0] + jitterLat, baseCoords[1] + jitterLng];
 
-            const customIcon = window.L.divIcon({
-                className: 'custom-map-pin',
-                html: `
-                    <div class="relative group cursor-pointer">
-                        <div class="w-12 h-12 bg-white rounded-full p-1 shadow-lg border-2 border-white transform transition-transform">
-                            <img src="${v.storeAvatarUrl || 'https://via.placeholder.com/40'}" class="w-full h-full rounded-full object-cover bg-gray-100" />
+                const customIcon = window.L.divIcon({
+                    className: 'custom-map-pin',
+                    html: `
+                        <div class="relative group cursor-pointer hover:z-50">
+                            <div class="w-12 h-12 bg-white rounded-full p-1 shadow-lg border-2 border-white transform transition-transform hover:scale-110">
+                                <img src="${v.storeAvatarUrl || 'https://via.placeholder.com/40'}" class="w-full h-full rounded-full object-cover bg-gray-100" />
+                            </div>
+                            <div class="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white shadow-sm"></div>
+                            ${v.isApproved ? '<div class="absolute -top-1 -right-1 bg-blue-500 text-white text-[8px] w-4 h-4 flex items-center justify-center rounded-full border border-white shadow-sm"><i class="fa-solid fa-check"></i></div>' : ''}
                         </div>
-                        <div class="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white shadow-sm"></div>
-                        ${v.isApproved ? '<div class="absolute -top-1 -right-1 bg-blue-500 text-white text-[8px] w-4 h-4 flex items-center justify-center rounded-full border border-white shadow-sm"><i class="fa-solid fa-check"></i></div>' : ''}
+                    `,
+                    iconSize: [48, 48],
+                    iconAnchor: [24, 54]
+                });
+
+                const marker = window.L.marker(position, { icon: customIcon });
+                
+                const popupContent = `
+                    <div class="text-center min-w-[120px]">
+                        <h3 class="font-bold text-gray-900 text-sm mb-1">${v.storeName}</h3>
+                        <p class="text-xs text-gray-500 mb-2"><i class="fa-solid fa-location-dot text-red-500"></i> ${v.location}</p>
+                        <button id="visit-store-${v.vendorId}" class="bg-primary text-white text-[10px] font-bold px-3 py-1.5 rounded-full w-full">Visit Store</button>
                     </div>
-                `,
-                iconSize: [48, 48],
-                iconAnchor: [24, 54]
-            });
+                `;
+                
+                marker.bindPopup(popupContent, { closeButton: false, offset: [0, -40] });
+                marker.on('popupopen', () => {
+                    const btn = document.getElementById(`visit-store-${v.vendorId}`);
+                    if(btn) btn.onclick = () => navigate(`/store/${v.vendorId}`);
+                });
+                
+                marker.on('click', () => {
+                    map.setView(position, 16, { animate: true });
+                    setIsDrawerOpen(false);
+                });
 
-            const marker = window.L.marker(position, { icon: customIcon });
-            
-            // Custom Popup
-            const popupContent = `
-                <div class="text-center min-w-[120px]">
-                    <h3 class="font-bold text-gray-900 text-sm mb-1">${v.storeName}</h3>
-                    <p class="text-xs text-gray-500 mb-2">${v.location}</p>
-                    <button id="visit-store-${v.vendorId}" class="bg-primary text-white text-[10px] font-bold px-3 py-1.5 rounded-full w-full">Visit Store</button>
-                </div>
-            `;
-            
-            marker.bindPopup(popupContent, { closeButton: false, offset: [0, -40] });
+                markersLayer.addLayer(marker);
+                markersArray.push(marker);
+          }
 
-            // Handle Popup Button Click
-            marker.on('popupopen', () => {
-                 const btn = document.getElementById(`visit-store-${v.vendorId}`);
-                 if(btn) {
-                     btn.onclick = () => navigate(`/store/${v.vendorId}`);
-                 }
-            });
-            
-            // Click to center
-            marker.on('click', () => {
-                map.setView(position, 16, { animate: true });
-            });
+          // Fit Bounds
+          if (markersArray.length > 0) {
+              const group = window.L.featureGroup(markersArray);
+              map.fitBounds(group.getBounds(), { padding: [50, 50] });
+          }
+      };
 
-            // Add to the LayerGroup instead of the map directly
-            markersLayerRef.current.addLayer(marker);
-      });
+      plotVendors();
 
-  }, [vendors, navigate]); // Dependencies: Re-run when vendors list updates
+  }, [vendors, navigate]);
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gray-100 flex flex-col">
       
-      {/* Top Search Bar (Floating) */}
+      {/* Top Search Bar */}
       <div className="absolute top-4 left-4 right-4 z-30 animate-slide-up">
         <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-float flex items-center p-3 border border-white/20">
             <i className="fa-solid fa-arrow-left text-gray-400 mr-3 cursor-pointer hover:text-gray-800 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors" onClick={() => navigate(-1)}></i>
@@ -152,16 +209,15 @@ export const SearchPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive Map Container */}
+      {/* Map */}
       <div className="absolute inset-0 z-0" onClick={() => setIsDrawerOpen(false)}>
           <div ref={mapContainerRef} className="w-full h-full outline-none" />
       </div>
 
-      {/* Bottom Drawer (Draggable/Expandable) */}
+      {/* Drawer */}
       <div 
         className={`absolute left-0 right-0 bottom-0 bg-white rounded-t-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-20 transition-all duration-500 cubic-bezier(0.32, 0.72, 0, 1) flex flex-col ${isDrawerOpen ? 'h-[60vh]' : 'h-[14vh]'}`}
       >
-        {/* Drag Handle */}
         <div 
             className="w-full py-4 flex justify-center cursor-grab active:cursor-grabbing touch-pan-y"
             onClick={() => setIsDrawerOpen(!isDrawerOpen)}
@@ -169,17 +225,16 @@ export const SearchPage: React.FC = () => {
             <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
         </div>
 
-        {/* Drawer Content */}
         <div className="flex-grow overflow-y-auto px-5 pb-20 hide-scrollbar">
             <div className="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-10">
-                <h3 className="font-bold text-gray-800 text-lg font-display">{approvedProducts.length} Results Nearby</h3>
+                <h3 className="font-bold text-gray-800 text-lg font-display">{approvedProducts.length} Results Found</h3>
                 <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full cursor-pointer hover:bg-primary/20 transition-colors">Filters</span>
             </div>
             
             <div className="grid grid-cols-1 gap-4">
                 {approvedProducts.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">
-                        <p>No products found in this area.</p>
+                        <p>No products found matching your search.</p>
                     </div>
                 ) : (
                     approvedProducts.map(product => {

@@ -59,6 +59,11 @@ export const BottomNav: React.FC = () => {
           <NavItem to="/vendor/orders" icon="receipt" label="Orders" active={isActive('/vendor/orders')} />
           <NavItem to="/vendor/profile" icon="store" label="Profile" active={isActive('/vendor/profile')} />
         </>
+      ) : currentRole === 'deliveryPerson' ? (
+        <>
+           <NavItem to="/delivery/dashboard" icon="motorcycle" label="Jobs" active={isActive('/delivery/dashboard')} />
+           <NavItem to="/buyer/profile" icon="user" label="Profile" active={isActive('/buyer/profile')} />
+        </>
       ) : null}
     </div>
   );
@@ -74,7 +79,7 @@ export const Navbar: React.FC = () => {
   const isAuthPage = location.pathname === '/' || location.pathname.startsWith('/auth');
   if (isAuthPage) return null;
 
-  const mainRoutes = ['/', '/login', '/buyer/dashboard', '/vendor/dashboard', '/admin/dashboard'];
+  const mainRoutes = ['/', '/login', '/buyer/dashboard', '/vendor/dashboard', '/admin/dashboard', '/delivery/dashboard'];
   const showBackButton = !mainRoutes.includes(location.pathname);
 
   return (
@@ -175,6 +180,19 @@ export const Navbar: React.FC = () => {
                                             <i className="fa-solid fa-chart-pie"></i>
                                         </div>
                                         Dashboard
+                                    </Link>
+                                )}
+
+                                {currentRole === 'deliveryPerson' && (
+                                     <Link 
+                                      to="/delivery/dashboard" 
+                                      className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
+                                      onClick={() => setShowDropdown(false)}
+                                    >
+                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
+                                            <i className="fa-solid fa-motorcycle"></i>
+                                        </div>
+                                        Delivery Hub
                                     </Link>
                                 )}
                               </div>

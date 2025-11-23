@@ -5,7 +5,7 @@ import { Button, Card, Input, Badge, Avatar } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
 
 export const UserProfile: React.FC = () => {
-    const { currentUser, currentRole, logout, switchRole, registerDeliveryPerson, orders, requestNotificationPermission } = useApp();
+    const { currentUser, currentRole, logout, switchRole, registerDeliveryPerson, orders, deliveryPersons, requestNotificationPermission } = useApp();
     const navigate = useNavigate();
     const [showDeliveryForm, setShowDeliveryForm] = useState(false);
     const [deliveryForm, setDeliveryForm] = useState({ fullName: '', vehicleType: 'bicycle' });
@@ -43,11 +43,14 @@ export const UserProfile: React.FC = () => {
         setSmsEnabled(!smsEnabled);
     };
 
-    // Filter orders for this user
-    // Sort by date descending (newest first)
     const myOrders = orders
         .filter(o => o.buyerId === currentUser.id)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Check delivery status
+    const deliveryProfile = deliveryPersons.find(d => d.userId === currentUser.id);
+    const isDeliveryApproved = deliveryProfile?.status === 'approved';
+    const isDeliveryPending = deliveryProfile?.status === 'pending';
 
     return (
         <div className="min-h-screen bg-gray-50 pb-24">
@@ -71,7 +74,7 @@ export const UserProfile: React.FC = () => {
                 {/* Role Switching */}
                 <Card className="p-4">
                     <h3 className="font-bold text-sm mb-3 text-gray-900">Switch Role</h3>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                         <Button 
                             variant={currentRole === 'buyer' ? 'primary' : 'outline'} 
                             fullWidth 
@@ -91,6 +94,19 @@ export const UserProfile: React.FC = () => {
                             </Button>
                         ) : (
                             <Button variant="outline" fullWidth size="sm" onClick={() => navigate('/vendor/onboarding')}>Become Vendor</Button>
+                        )}
+
+                        {/* Delivery Role Switch */}
+                        {isDeliveryApproved && (
+                             <Button 
+                                variant={currentRole === 'deliveryPerson' ? 'primary' : 'outline'} 
+                                fullWidth 
+                                size="sm"
+                                className="col-span-2"
+                                onClick={() => { switchRole('deliveryPerson'); navigate('/delivery/dashboard'); }}
+                            >
+                                Delivery Dashboard
+                            </Button>
                         )}
                     </div>
                 </Card>
@@ -157,37 +173,43 @@ export const UserProfile: React.FC = () => {
                 )}
 
                 {/* Delivery Registration */}
-                <Card className="p-4">
-                    <h3 className="font-bold text-sm mb-2 text-gray-900">Delivery Opportunities</h3>
-                    {!showDeliveryForm ? (
-                        <div onClick={() => setShowDeliveryForm(true)} className="flex items-center justify-between cursor-pointer py-2 hover:bg-gray-50 rounded px-2 -mx-2 transition-colors">
-                            <span className="text-sm text-gray-600">Register as Delivery Person</span>
-                            <i className="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
-                        </div>
-                    ) : (
-                        <form onSubmit={handleDeliverySubmit} className="mt-2 space-y-3">
-                            <Input 
-                                placeholder="Full Legal Name" 
-                                value={deliveryForm.fullName}
-                                onChange={e => setDeliveryForm({...deliveryForm, fullName: e.target.value})}
-                                required
-                            />
-                             <select 
-                                className="block w-full rounded-lg border-gray-300 border bg-white py-2 px-3 text-sm"
-                                value={deliveryForm.vehicleType}
-                                onChange={e => setDeliveryForm({...deliveryForm, vehicleType: e.target.value})}
-                            >
-                                <option value="bicycle">Bicycle</option>
-                                <option value="motorbike">Motorbike</option>
-                                <option value="scooter">Scooter</option>
-                            </select>
-                            <div className="flex gap-2">
-                                <Button type="submit" size="sm" fullWidth>Submit</Button>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setShowDeliveryForm(false)}>Cancel</Button>
+                {!isDeliveryApproved && (
+                    <Card className="p-4">
+                        <h3 className="font-bold text-sm mb-2 text-gray-900">Delivery Opportunities</h3>
+                        {isDeliveryPending ? (
+                            <div className="bg-yellow-50 text-yellow-700 p-3 rounded-xl text-sm font-medium flex items-center gap-2">
+                                <i className="fa-solid fa-clock"></i> Application Pending
                             </div>
-                        </form>
-                    )}
-                </Card>
+                        ) : !showDeliveryForm ? (
+                            <div onClick={() => setShowDeliveryForm(true)} className="flex items-center justify-between cursor-pointer py-2 hover:bg-gray-50 rounded px-2 -mx-2 transition-colors">
+                                <span className="text-sm text-gray-600">Register as Delivery Person</span>
+                                <i className="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleDeliverySubmit} className="mt-2 space-y-3">
+                                <Input 
+                                    placeholder="Full Legal Name" 
+                                    value={deliveryForm.fullName}
+                                    onChange={e => setDeliveryForm({...deliveryForm, fullName: e.target.value})}
+                                    required
+                                />
+                                <select 
+                                    className="block w-full rounded-lg border-gray-300 border bg-white py-2 px-3 text-sm"
+                                    value={deliveryForm.vehicleType}
+                                    onChange={e => setDeliveryForm({...deliveryForm, vehicleType: e.target.value})}
+                                >
+                                    <option value="bicycle">Bicycle</option>
+                                    <option value="motorbike">Motorbike</option>
+                                    <option value="scooter">Scooter</option>
+                                </select>
+                                <div className="flex gap-2">
+                                    <Button type="submit" size="sm" fullWidth>Submit</Button>
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowDeliveryForm(false)}>Cancel</Button>
+                                </div>
+                            </form>
+                        )}
+                    </Card>
+                )}
 
                 <Button variant="danger" fullWidth onClick={() => { logout(); navigate('/'); }}>Log Out</Button>
             </div>

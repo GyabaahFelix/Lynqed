@@ -38,6 +38,7 @@ interface AppContextType {
   clearCart: () => void;
   placeOrder: (deliveryOption: 'delivery' | 'pickup') => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  assignDelivery: (orderId: string) => Promise<void>; // New
   toggleFavorite: (productId: string) => void;
   
   // UI Actions
@@ -46,7 +47,7 @@ interface AppContextType {
   requestNotificationPermission: () => Promise<boolean>;
 
   // Vendor/Admin Actions
-  approveDeliveryPerson: (id: string) => void;
+  approveDeliveryPerson: (id: string, userId: string) => void; // Updated signature
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -91,35 +92,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const productSubscription = supabase
       .channel('public:products')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-          fetchData(); // Refresh data on any product change
+          fetchData(); 
       })
       .subscribe();
       
-    // Subscribe to Realtime changes for New Orders (Notifications)
+    // Subscribe to Realtime changes for New Orders
     const orderSubscription = supabase
       .channel('public:orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
           const newOrder = payload.new as any;
           
-          // Check if the new order belongs to the currently logged in vendor
           if (userRef.current) {
-              // Fetch the vendor details for this order to see if it matches current user
               const { data: vendorData } = await supabase
                   .from('vendors')
                   .select('*')
                   .eq('vendorId', newOrder.vendorId)
                   .single();
               
-              // Map properly regardless of column case
               const vUserId = vendorData?.userId;
 
               if (vUserId && vUserId === userRef.current.id) {
-                  // Notify Vendor
                   playNotificationSound();
                   showToast(`New Order! ₵${newOrder.total}`, 'info');
                   sendBrowserNotification(newOrder);
-                  
-                  // Refresh orders list
                   fetchData();
               }
           }
@@ -160,16 +155,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .eq('id', userId)
             .single();
           
-          // SELF-HEALING Logic: If profile missing but auth exists
           if (!data) {
               const { data: { user } } = await supabase.auth.getUser();
               if (user && user.user_metadata) {
                   const meta = user.user_metadata;
-                  // Use social provider image if available, else leave undefined
-                  // This allows the Avatar component to handle initials properly
                   const avatar = meta.avatar_url || null;
-                  
-                  // If roles are missing in metadata, default to buyer
                   const userRoles = meta.roles || ['buyer'];
                   
                   const { error: insertError } = await supabase.from('profiles').insert({
@@ -197,16 +187,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               setCurrentUser(user);
               
-              // FORCE ROLE UPDATE from live data
               const hasAdmin = user.roles.includes('admin');
               const hasVendor = user.roles.includes('vendor');
+              const hasDelivery = user.roles.includes('deliveryPerson');
               
               if(hasAdmin && currentRole === 'admin') {
                   // Keep admin
               } else if (hasVendor && currentRole === 'vendor') {
                   // Keep vendor
+              } else if (hasDelivery && currentRole === 'deliveryPerson') {
+                  // Keep delivery
               } else {
-                   // Default fallback
                    const defaultRole = hasVendor ? 'vendor' : hasAdmin ? 'admin' : 'buyer';
                    setCurrentRole(defaultRole);
               }
@@ -224,34 +215,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const fetchData = async () => {
       try {
-          // Fetch Products
           const { data: prodData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-          if (prodData) {
-              setProducts(prodData as Product[]);
-          }
+          if (prodData) setProducts(prodData as Product[]);
 
-          // Fetch Vendors
           const { data: vendData } = await supabase.from('vendors').select('*');
-          if (vendData) {
-              setVendors(vendData as Vendor[]);
-          }
+          if (vendData) setVendors(vendData as Vendor[]);
 
-          // Fetch Orders
           const { data: ordData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
           if (ordData) {
              const mappedOrders = ordData.map((o: any) => ({
                  ...o,
-                 // Ensure items is parsed if string
                  items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
              }));
              setOrders(mappedOrders as Order[]);
           }
 
-          // Fetch Delivery Persons
           const { data: delData } = await supabase.from('delivery_persons').select('*');
-          if (delData) {
-              setDeliveryPersons(delData as DeliveryPerson[]);
-          }
+          if (delData) setDeliveryPersons(delData as DeliveryPerson[]);
       } catch (e) {
           console.error("Data fetch error", e);
       }
@@ -264,15 +244,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (error) throw error;
           
           if (data.user) {
-              // 1. Fetch Profile to get LIVE roles
               const user = await fetchUserProfile(data.user.id);
-              
-              // 2. Refresh Data
               await fetchData();
 
               if (user) {
                    if (user.roles.includes('admin')) return { success: true, role: 'admin' };
                    if (user.roles.includes('vendor')) return { success: true, role: 'vendor' };
+                   if (user.roles.includes('deliveryPerson')) return { success: true, role: 'deliveryPerson' };
                    return { success: true, role: 'buyer' };
               }
           }
@@ -295,19 +273,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
           });
 
-          // HANDLE 'User already registered' Logic
-          // This happens if a user was deleted from the profiles table (DB) but still exists in Supabase Auth
           if (error?.message === "User already registered" || error?.toString().includes("already registered")) {
-              
-              // Attempt to login with the provided credentials to verify ownership
               const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-              
               if (!loginError && loginData.user) {
-                  // Check if profile exists in DB
                   const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', loginData.user.id).single();
-                  
                   if (!existingProfile) {
-                      // Profile is missing! Recreate it (Account Recovery)
                        await supabase.from('profiles').insert({
                           id: loginData.user.id,
                           email: email,
@@ -315,37 +285,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                           avatarUrl: null,
                           roles: [role]
                       });
-                      
-                      // Update metadata to match new name
-                      await supabase.auth.updateUser({
-                          data: { full_name: fullName, roles: [role] }
-                      });
-
-                      await login(email, password); // Auto login
+                      await supabase.auth.updateUser({ data: { full_name: fullName, roles: [role] } });
+                      await login(email, password);
                       showToast('Account recovered successfully!', 'success');
                       return { success: true };
                   } else {
                       return { success: false, error: "Account already exists. Please log in." };
                   }
-              } else {
-                  // Login failed (Wrong password or other issue)
-                  return { success: false, error: "Email is registered. Please log in or use 'Forgot Password' if you cannot access it." };
               }
+              return { success: false, error: "Email is registered. Please log in." };
           }
 
           if (error) throw error;
           
-          // Normal Success Path
           if (data.user) {
                await supabase.from('profiles').insert({
                   id: data.user.id,
                   email: email,
                   name: fullName,
-                  avatarUrl: null, // Allow fallback to Avatar component
+                  avatarUrl: null,
                   roles: [role]
               });
-              
-              await login(email, password); // Auto login
+              await login(email, password);
               return { success: true };
           }
           return { success: false, error: "Signup failed" };
@@ -360,7 +321,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentRole('guest');
       setCart([]);
       setIsLoading(false);
-      // Optional: Refresh data to clear personal views, though redirect usually handles this
       fetchData(); 
   };
 
@@ -373,20 +333,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Store Actions ---
   const registerVendor = async (data: any) => {
       if (!currentUser) return;
-      
       const newVendor = {
           vendorId: `vendor-${Date.now()}`,
           userId: currentUser.id,
           storeName: data.storeName,
           storeDescription: data.storeDescription,
           location: data.location,
-          storeAvatarUrl: null, // Let avatar component handle it
+          storeAvatarUrl: null,
           contactPhone: data.contactPhone,
           isApproved: true,
           rating: 5.0
       };
-      
-      // Save to Supabase using EXACT column names
       const { error } = await supabase.from('vendors').insert({
           vendorId: newVendor.vendorId,
           userId: newVendor.userId,
@@ -398,9 +355,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           isApproved: true,
           rating: 5.0
       });
-
       if (!error) {
-           // Update User Roles locally and in DB
           if (!currentUser.roles.includes('vendor')) {
               const newRoles = [...currentUser.roles, 'vendor'];
               await supabase.from('profiles').update({ roles: newRoles }).eq('id', currentUser.id);
@@ -411,17 +366,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           fetchData();
       } else {
           showToast('Failed to create store.', 'error');
-          console.error(error);
       }
   };
 
   const addProduct = async (productData: any) => {
       if (!currentUser) return false;
       const myVendor = vendors.find(v => v.userId === currentUser.id);
-      if (!myVendor) {
-          alert("Vendor profile not found");
-          return false;
-      }
+      if (!myVendor) { alert("Vendor profile not found"); return false; }
 
       const { error } = await supabase.from('products').insert({
           vendorId: myVendor.vendorId, 
@@ -443,7 +394,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           fetchData();
           return true;
       } else {
-          console.error(error);
           showToast('Failed to add product', 'error');
           return false;
       }
@@ -451,26 +401,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateProduct = async (id: string, data: Partial<Product>) => {
       const { error } = await supabase.from('products').update(data).eq('id', id);
-      if (!error) {
-          showToast('Product updated', 'success');
-          fetchData();
-      }
+      if (!error) { showToast('Product updated', 'success'); fetchData(); }
   };
 
   const deleteProduct = async (id: string) => {
       const { error } = await supabase.from('products').delete().eq('id', id);
-      if (!error) {
-          showToast('Product deleted', 'success');
-          fetchData();
-      }
+      if (!error) { showToast('Product deleted', 'success'); fetchData(); }
   };
 
   const updateProductStatus = async (id: string, status: Product['status']) => {
       const { error } = await supabase.from('products').update({ status }).eq('id', id);
-      if (!error) {
-          showToast(`Product ${status}`, 'success');
-          fetchData();
-      }
+      if (!error) { showToast(`Product ${status}`, 'success'); fetchData(); }
   };
 
   // --- Cart/Order Actions ---
@@ -493,29 +434,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const placeOrder = async (deliveryOption: 'delivery' | 'pickup') => {
       if (cart.length === 0) return;
-      
-      // Group items by vendor
       const itemsByVendor: Record<string, CartItem[]> = {};
       cart.forEach(item => {
           if (!itemsByVendor[item.product.vendorId]) itemsByVendor[item.product.vendorId] = [];
           itemsByVendor[item.product.vendorId].push(item);
       });
 
-      // Create an order for each vendor
       for (const vendorId in itemsByVendor) {
           const items = itemsByVendor[vendorId];
           const total = items.reduce((sum, i) => sum + (i.product.price * i.quantity), 0);
           
           await supabase.from('orders').insert({
-              buyerId: currentUser ? currentUser.id : 'guest', // Will fail if UUID constraint exists and this isn't UUID
+              buyerId: currentUser ? currentUser.id : 'guest',
               vendorId: vendorId,
-              items: items, // JSONB
+              items: items,
               total: total + (deliveryOption === 'delivery' ? 10 : 0),
               status: 'placed',
               deliveryOption: deliveryOption
           });
 
-          // Decrement Stock
           for (const item of items) {
               const newStock = Math.max(0, item.product.stock - item.quantity);
               await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
@@ -529,8 +466,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+      if (!error) { showToast(`Order updated to ${status}`, 'success'); fetchData(); }
+  };
+
+  const assignDelivery = async (orderId: string) => {
+      if (!currentUser) return;
+      const { error } = await supabase.from('orders').update({ 
+          deliveryPersonId: currentUser.id,
+          status: 'in_route' 
+      }).eq('id', orderId);
+      
       if (!error) {
-          showToast(`Order updated to ${status}`, 'success');
+          showToast('Delivery Assigned to You!', 'success');
           fetchData();
       }
   };
@@ -544,7 +491,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   };
 
-  // --- Other Actions ---
+  // --- Delivery Staff Actions ---
   const registerDeliveryPerson = async (data: any) => {
       if (!currentUser) return;
       await supabase.from('delivery_persons').insert({
@@ -556,9 +503,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fetchData();
   };
 
-  const approveDeliveryPerson = async (id: string) => {
+  const approveDeliveryPerson = async (id: string, userId: string) => {
+      // 1. Mark as approved in delivery_persons table
       await supabase.from('delivery_persons').update({ status: 'approved' }).eq('id', id);
-      showToast('Staff approved', 'success');
+      
+      // 2. Add 'deliveryPerson' role to profiles table
+      const { data: profile } = await supabase.from('profiles').select('roles').eq('id', userId).single();
+      if (profile) {
+          const currentRoles = profile.roles || [];
+          if (!currentRoles.includes('deliveryPerson')) {
+              await supabase.from('profiles').update({ 
+                  roles: [...currentRoles, 'deliveryPerson'] 
+              }).eq('id', userId);
+          }
+      }
+
+      showToast('Staff approved & Role Granted', 'success');
       fetchData();
   };
 
@@ -597,7 +557,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToCart, removeFromCart, clearCart, placeOrder, updateOrderStatus,
       registerDeliveryPerson, approveDeliveryPerson, toggleFavorite,
       showToast, hideToast, requestNotificationPermission,
-      refreshData: fetchData
+      assignDelivery, refreshData: fetchData
     }}>
       {children}
     </AppContext.Provider>

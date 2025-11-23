@@ -41,8 +41,8 @@ export interface Product {
   price: number;
   currency: string;
   category: string;
-  images: string[]; // Changed from image string to array
-  contactPhone?: string; // Added contact info
+  images: string[];
+  contactPhone?: string;
   stock: number;
   status: ProductStatus;
   location: string;
@@ -61,6 +61,7 @@ export interface Order {
   id: string;
   buyerId: string;
   vendorId: string;
+  deliveryPersonId?: string; // Added field
   items: CartItem[];
   total: number;
   status: OrderStatus;
@@ -72,5 +73,5 @@ export interface Category {
   id: string;
   name: string;
   icon: string;
-  image: string; // Added for realistic thumbnails
+  image: string;
 }

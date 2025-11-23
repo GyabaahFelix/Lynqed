@@ -10,6 +10,7 @@ import { VendorDashboard, VendorProducts, AddProduct, EditProduct, VendorOrders,
 import { AdminDashboard } from './pages/Admin';
 import { UserProfile, OrdersPage, WishlistPage } from './pages/Profile';
 import { Login, Register, AdminLogin } from './pages/Auth';
+import { DeliveryDashboard } from './pages/Delivery';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
     const { currentUser, currentRole, isLoading } = useApp();
@@ -55,6 +56,9 @@ const AppContent = () => {
         <Route path="/vendor/orders" element={<ProtectedRoute role="vendor"><VendorOrders /></ProtectedRoute>} />
         <Route path="/vendor/profile" element={<ProtectedRoute role="vendor"><UserProfile /></ProtectedRoute>} />
         
+        {/* Delivery Routes */}
+        <Route path="/delivery/dashboard" element={<ProtectedRoute role="deliveryPerson"><DeliveryDashboard /></ProtectedRoute>} />
+
         {/* Admin Routes */}
         <Route path="/admin/dashboard" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
       </Routes>

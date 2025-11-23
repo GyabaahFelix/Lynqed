@@ -181,7 +181,7 @@ export const AdminDashboard: React.FC = () => {
                                     <p className="text-sm text-gray-500 capitalize"><i className="fa-solid fa-bicycle mr-1"></i> {dp.vehicleType}</p>
                                 </div>
                                 <div className="space-x-2">
-                                    <Button size="sm" onClick={() => approveDeliveryPerson(dp.id)} className="shadow-none">Approve</Button>
+                                    <Button size="sm" onClick={() => approveDeliveryPerson(dp.id, dp.userId)} className="shadow-none">Approve</Button>
                                 </div>
                             </Card>
                         ))}
