@@ -190,7 +190,19 @@ export const ProductDetail: React.FC = () => {
   };
 
   const isFav = favorites.includes(product.id);
-  const contactNumber = product.contactPhone || (vendor as any)?.contactPhone || '233000000000';
+  
+  // Sanitize phone number for WhatsApp
+  const rawContactNumber = product.contactPhone || (vendor as any)?.contactPhone || '233000000000';
+  const formatPhoneNumber = (phone: string) => {
+      // Remove all non-numeric chars
+      let cleaned = phone.replace(/\D/g, '');
+      // Check common Ghana prefix '0' (e.g., 0244...) and replace with '233'
+      if (cleaned.startsWith('0') && cleaned.length >= 10) {
+          return '233' + cleaned.substring(1);
+      }
+      return cleaned;
+  };
+  const whatsappNumber = formatPhoneNumber(rawContactNumber);
 
   return (
     <div className="bg-white min-h-screen relative flex flex-col pb-[110px]">
@@ -318,7 +330,7 @@ export const ProductDetail: React.FC = () => {
           <div className="flex items-center gap-2 max-w-3xl mx-auto">
             <button 
                 className="w-12 h-12 flex items-center justify-center rounded-xl text-green-600 bg-green-50 hover:bg-green-100 transition-colors active:scale-95 border border-green-100 flex-shrink-0"
-                onClick={() => window.open(`https://wa.me/${contactNumber}?text=Hi, I'm interested in ${product.title} on LYNQED.`, '_blank')}
+                onClick={() => window.open(`https://wa.me/${whatsappNumber}?text=Hi, I'm interested in ${product.title} on LYNQED.`, '_blank')}
             >
                 <i className="fa-brands fa-whatsapp text-2xl"></i>
             </button>

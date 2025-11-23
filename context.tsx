@@ -165,11 +165,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const { data: { user } } = await supabase.auth.getUser();
               if (user && user.user_metadata) {
                   const meta = user.user_metadata;
+                  // Use social provider image if available, else generate initials
+                  const avatar = meta.avatar_url || `https://ui-avatars.com/api/?name=${meta.full_name || 'User'}&background=random`;
+                  
                   const { error: insertError } = await supabase.from('profiles').insert({
                       id: user.id,
                       email: user.email,
                       name: meta.full_name || 'User',
-                      avatarUrl: meta.avatar_url,
+                      avatarUrl: avatar,
                       roles: meta.roles || ['buyer']
                   });
                   
