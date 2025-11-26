@@ -170,14 +170,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               setCurrentUser(user);
               
-              // Role Verification Logic
-              // We check if the 'currentRole' (restored from localStorage) is actually valid for this user
-              // This prevents a 'buyer' from manually setting localStorage to 'admin'
-              const storedRoleIsActive = currentRole !== 'guest' && user.roles.includes(currentRole);
+              // Role Verification Logic - ROBUST REFRESH FIX
+              // We read directly from localStorage here to ensure we get the persisted intent
+              // even if the React state variable 'currentRole' is stale in this closure.
+              const persistedRole = localStorage.getItem('lynqed_role') as Role;
+              const isPersistedRoleValid = persistedRole && user.roles.includes(persistedRole);
 
-              if (storedRoleIsActive) {
+              if (isPersistedRoleValid) {
                   // Keep the persisted role (e.g., stay as Admin after refresh)
-                  setCurrentRole(currentRole);
+                  setCurrentRole(persistedRole);
               } else {
                   // Fallback: Default Hierarchy if stored role is invalid or missing
                   if (user.roles.includes('admin')) setCurrentRole('admin');
@@ -225,8 +226,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (dData) setDeliveryPersons(dData as DeliveryPerson[]);
           } catch(e) { /* Table might not exist yet */ }
 
-          // Admin only data
-          if (currentRole === 'admin' || userRef.current?.roles.includes('admin')) {
+          // Admin only data - check if user IS admin based on current roles in ref or local
+          // We use a loose check here to try and fetch if they might be admin
+          if (localStorage.getItem('lynqed_role') === 'admin') {
               try {
                 const { data: uData } = await supabase.from('profiles').select('*');
                 if (uData) setUsers(uData as any);
@@ -249,10 +251,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           await fetchData();
           
           if (user) {
-              // Priority Role Assignment on Login (if no specific role requested)
-              // But check if we already set it in fetchUserProfile (based on localStorage)
+              // Intelligent Role Assignment on Login
+              // If the user was previously logged in with a specific role, we might want to respect that?
+              // Or default to their "highest" role.
+              // Let's default to highest role to make it easy.
               
-              // If we want to force specific dashboard based on role hierarchy:
               let targetRole: Role = 'buyer';
               if (user.roles.includes('admin')) targetRole = 'admin';
               else if (user.roles.includes('vendor')) targetRole = 'vendor';

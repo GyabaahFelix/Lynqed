@@ -208,9 +208,36 @@ export const AdminDashboard: React.FC = () => {
             )}
 
             {view === 'users' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left min-w-[600px]">
+                <>
+                    {/* Mobile Card View (< md) */}
+                    <div className="grid grid-cols-1 gap-4 md:hidden animate-fade-in">
+                        {users.map(u => (
+                            <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3">
+                                <div className="flex items-center gap-3">
+                                    <Avatar name={u.name} src={u.avatarUrl} size="md" />
+                                    <div>
+                                        <p className="font-bold text-gray-900 text-sm">{u.name}</p>
+                                        <p className="text-xs text-gray-500 break-all">{u.email}</p>
+                                    </div>
+                                    <div className="ml-auto">
+                                        {u.isBanned ? <Badge color="red">Banned</Badge> : <Badge color="green">Active</Badge>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between border-t border-gray-50 pt-3 mt-1">
+                                    <div className="flex gap-1 flex-wrap">
+                                        {u.roles.map(r => <Badge key={r} color="gray" className="text-[10px]">{r}</Badge>)}
+                                    </div>
+                                    <Button size="sm" variant={u.isBanned ? 'success' : 'danger'} onClick={() => banUser(u.id, !u.isBanned)}>
+                                        {u.isBanned ? 'Unban' : 'Ban'}
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Desktop Table View (>= md) */}
+                    <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
+                        <table className="w-full text-left">
                             <thead className="bg-gray-50 text-xs uppercase text-gray-400">
                                 <tr>
                                     <th className="px-6 py-4">User</th>
@@ -245,7 +272,7 @@ export const AdminDashboard: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </>
             )}
 
             {view === 'products' && (
