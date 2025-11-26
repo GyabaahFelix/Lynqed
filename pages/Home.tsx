@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { CATEGORIES } from '../constants';
+import { CATEGORIES, INITIAL_LOCATION_CACHE } from '../constants';
 import { Button, Input, Card, Badge } from '../components/UI';
 
 export const Welcome: React.FC = () => {
@@ -80,10 +80,60 @@ export const Welcome: React.FC = () => {
 };
 
 export const BuyerDashboard: React.FC = () => {
-  const { products, vendors, favorites, toggleFavorite, currentUser, addToCart } = useApp();
+  const { products, vendors, favorites, toggleFavorite, currentUser, addToCart, removeFromCart, cart, showToast } = useApp();
   const navigate = useNavigate();
   const [selectedCat, setSelectedCat] = useState('All');
   const [sortType, setSortType] = useState<'nearby' | 'price' | 'rating'>('nearby');
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+
+  // --- Geolocation Logic ---
+  useEffect(() => {
+      if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+              (position) => {
+                  setUserLocation({
+                      lat: position.coords.latitude,
+                      lng: position.coords.longitude
+                  });
+              },
+              (error) => {
+                  console.log("GPS Denied or Error", error);
+                  // Default to Legon if denied, so 'nearby' still calculates relative to campus
+                  setUserLocation({ lat: 5.6506, lng: -0.1962 });
+              }
+          );
+      }
+  }, []);
+
+  // Haversine Formula for Distance (km)
+  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371; // Radius of earth
+      const dLat = deg2rad(lat2 - lat1);
+      const dLon = deg2rad(lon2 - lon1);
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2); 
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      return R * c;
+  };
+
+  const deg2rad = (deg: number) => deg * (Math.PI/180);
+
+  // Helper to get coords from location string
+  const getCoordsForLocation = (locStr: string): {lat: number, lng: number} | null => {
+      const clean = locStr.toLowerCase();
+      // Exact match in cache
+      if (INITIAL_LOCATION_CACHE[clean]) {
+          return { lat: INITIAL_LOCATION_CACHE[clean][0], lng: INITIAL_LOCATION_CACHE[clean][1] };
+      }
+      // Partial match
+      const key = Object.keys(INITIAL_LOCATION_CACHE).find(k => clean.includes(k));
+      if (key) {
+          return { lat: INITIAL_LOCATION_CACHE[key][0], lng: INITIAL_LOCATION_CACHE[key][1] };
+      }
+      return null;
+  };
 
   // 1. Compute Dynamic Categories
   const standardNames = new Set(CATEGORIES.map(c => c.name));
@@ -116,13 +166,26 @@ export const BuyerDashboard: React.FC = () => {
       filteredProducts = [...filteredProducts].sort((a, b) => a.price - b.price);
   } else if (sortType === 'rating') {
       filteredProducts = [...filteredProducts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  } else {
-      filteredProducts = [...filteredProducts].sort((a, b) => a.id.localeCompare(b.id)); 
+  } else if (sortType === 'nearby' && userLocation) {
+      filteredProducts = [...filteredProducts].sort((a, b) => {
+          const coordsA = getCoordsForLocation(a.location);
+          const coordsB = getCoordsForLocation(b.location);
+          
+          const distA = coordsA ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, coordsA.lat, coordsA.lng) : 9999;
+          const distB = coordsB ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, coordsB.lat, coordsB.lng) : 9999;
+          
+          return distA - distB;
+      });
   }
 
   const FilterButton = ({ type, label }: { type: 'nearby'|'price'|'rating', label: string }) => (
       <button 
-        onClick={() => setSortType(type)}
+        onClick={() => {
+            if (type === 'nearby' && !userLocation) {
+                showToast("Acquiring location...", "info");
+            }
+            setSortType(type);
+        }}
         className={`px-4 py-1.5 rounded-full text-[11px] font-bold shadow-sm whitespace-nowrap transition-all duration-300 active:scale-95 ${sortType === type ? 'bg-gray-900 text-white shadow-gray-500/30' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}
       >
         {label}
@@ -224,7 +287,7 @@ export const BuyerDashboard: React.FC = () => {
       <div className="px-3 pb-24">
          <div className="flex justify-between items-end mb-4 px-1">
             <h3 className="font-display font-bold text-gray-900 text-base">
-                {sortType === 'price' ? 'Best Deals' : sortType === 'rating' ? 'Top Rated Items' : 'Recommended For You'}
+                {sortType === 'price' ? 'Best Deals' : sortType === 'rating' ? 'Top Rated Items' : sortType === 'nearby' ? 'Nearest to You' : 'Recommended'}
             </h3>
             {selectedCat !== 'All' && <span className="text-[10px] font-bold text-red-500 cursor-pointer bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition-colors" onClick={() => setSelectedCat('All')}>Clear</span>}
          </div>
@@ -242,6 +305,7 @@ export const BuyerDashboard: React.FC = () => {
                     const vendor = vendors.find(v => v.vendorId === product.vendorId);
                     const mainImage = product.images && product.images.length > 0 ? product.images[0] : 'https://via.placeholder.com/300';
                     const isFav = favorites.includes(product.id);
+                    const isInCart = cart.some(item => item.productId === product.id);
                     
                     return (
                         <div 
@@ -249,14 +313,19 @@ export const BuyerDashboard: React.FC = () => {
                             className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 hover:shadow-xl transition-all duration-300 group relative flex flex-col h-full cursor-pointer"
                             onClick={() => navigate(`/buyer/product/${product.id}`)}
                         >
-                             {/* Image - Fills large space (approx 80%) */}
-                            <div className="aspect-[4/5] w-full relative overflow-hidden">
+                             {/* Image - Square Aspect Ratio for Compactness */}
+                            <div className="aspect-square w-full relative overflow-hidden">
                                 <img 
                                     src={mainImage} 
                                     alt={product.title} 
                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
                                 />
                                 
+                                {/* Location Badge - Glass Effect on Top Left */}
+                                <div className="absolute top-2 left-2 bg-white/80 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold border border-white/50 shadow-sm flex items-center gap-1 z-20 text-gray-700">
+                                     <i className="fa-solid fa-location-dot text-primary text-[9px]"></i> {product.location}
+                                </div>
+
                                 {/* Fav Button (Floating) */}
                                 <button 
                                     className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90"
@@ -271,24 +340,32 @@ export const BuyerDashboard: React.FC = () => {
                                 {product.stock === 0 && <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10"><span className="bg-black/80 text-white text-[10px] px-3 py-1 rounded font-bold uppercase tracking-wide">Out of Stock</span></div>}
                             </div>
 
-                            {/* Bottom Details - Compact Area (approx 20%) */}
+                            {/* Bottom Details - Increased Font Sizes */}
                             <div className="p-3 bg-white flex flex-col justify-between flex-grow relative z-10">
                                 <div>
-                                    <h3 className="text-xs text-gray-800 font-bold leading-tight line-clamp-2 mb-1">{product.title}</h3>
-                                    <p className="text-[10px] text-gray-400 line-clamp-1">{vendor?.storeName}</p>
+                                    <h3 className="text-sm text-gray-800 font-bold leading-tight line-clamp-2 mb-1">{product.title}</h3>
+                                    <p className="text-[11px] text-gray-400 line-clamp-1">{vendor?.storeName}</p>
                                 </div>
                                 
                                 <div className="flex items-center justify-between mt-2">
-                                    <span className="text-sm font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
+                                    <span className="text-lg font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
                                     <button 
-                                        className={`w-7 h-7 rounded-full flex items-center justify-center text-white transition-all shadow-md active:scale-90 ${product.stock > 0 ? 'bg-black hover:bg-primary' : 'bg-gray-300 cursor-not-allowed'}`}
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all shadow-md active:scale-90 group-btn ${product.stock === 0 ? 'bg-gray-300 cursor-not-allowed' : isInCart ? 'bg-green-500 hover:bg-red-500' : 'bg-black hover:bg-primary'}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if(product.stock > 0) addToCart(product);
+                                            if (product.stock > 0) {
+                                                if (isInCart) {
+                                                    removeFromCart(product.id);
+                                                    showToast('Removed from Cart', 'info');
+                                                } else {
+                                                    addToCart(product);
+                                                }
+                                            }
                                         }}
                                         disabled={product.stock === 0}
                                     >
-                                        <i className="fa-solid fa-plus text-xs"></i>
+                                        <i className={`fa-solid ${isInCart ? 'fa-check group-btn-hover:fa-trash' : 'fa-plus'} text-xs ${isInCart ? 'group-hover:hidden' : ''}`}></i>
+                                        {isInCart && <i className="fa-solid fa-trash text-xs hidden group-hover:inline"></i>}
                                     </button>
                                 </div>
                             </div>

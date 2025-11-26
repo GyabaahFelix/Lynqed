@@ -1,194 +1,288 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context';
-import { Button, Badge, Card } from '../components/UI';
+import { Button, Badge, Card, Avatar } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
 
+type AdminView = 'dashboard' | 'users' | 'vendors' | 'products' | 'logistics' | 'orders';
+
 export const AdminDashboard: React.FC = () => {
-  const { products, updateProductStatus, deleteProduct, deliveryPersons, approveDeliveryPerson, logout } = useApp();
+  const { 
+    products, users, vendors, orders, deliveryPersons,
+    updateProductStatus, deleteProduct, 
+    approveVendor, banUser, approveDeliveryPerson,
+    logout 
+  } = useApp();
+  
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [view, setView] = useState<AdminView>('dashboard');
 
-  const filteredProducts = products.filter(p => {
-      if (activeTab === 'all') return true;
-      return p.status === activeTab;
-  });
+  // Stats
+  const revenue = orders.reduce((acc, o) => acc + o.total, 0);
+  const pendingProducts = products.filter(p => p.status === 'pending');
+  const pendingVendors = vendors.filter(v => !v.isApproved);
+  const pendingRiders = deliveryPersons.filter(d => d.status === 'pending');
 
-  const pendingDelivery = deliveryPersons.filter(d => d.status === 'pending');
-
-  const handleStatusUpdate = (e: React.MouseEvent, id: string, status: any) => {
-      e.stopPropagation();
-      updateProductStatus(id, status);
-  };
+  const SidebarItem = ({ id, icon, label }: { id: AdminView, icon: string, label: string }) => (
+      <div 
+        onClick={() => setView(id)}
+        className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all ${view === id ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+      >
+          <i className={`fa-solid fa-${icon} w-5`}></i>
+          <span className="font-bold text-sm">{label}</span>
+      </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 animate-fade-in">
-        {/* Admin Header */}
-        <div className="bg-gray-900 text-white px-6 py-5 flex justify-between items-center shadow-lg">
-            <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 bg-gray-700 rounded-xl flex items-center justify-center shadow-inner">
-                     <i className="fa-solid fa-shield-halved text-primaryLight"></i>
-                 </div>
-                 <h1 className="font-display font-bold text-xl tracking-tight">Admin Panel</h1>
+    <div className="min-h-screen bg-gray-50 flex">
+        {/* Sidebar */}
+        <div className="w-64 bg-gray-900 text-white p-4 flex flex-col fixed h-full overflow-y-auto">
+            <div className="flex items-center gap-2 mb-10 px-2 mt-4">
+                <div className="w-8 h-8 bg-gradient-to-tr from-primary to-secondary rounded-lg flex items-center justify-center">
+                    <i className="fa-solid fa-shield-halved text-sm"></i>
+                </div>
+                <span className="font-display font-extrabold text-lg tracking-tight">Admin<span className="text-primary">Panel</span></span>
             </div>
-            <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white hover:bg-gray-800" onClick={() => { logout(); navigate('/'); }}>
-                Logout
-            </Button>
+
+            <div className="space-y-1 flex-1">
+                <SidebarItem id="dashboard" icon="chart-line" label="Overview" />
+                <SidebarItem id="users" icon="users" label="User Management" />
+                <SidebarItem id="vendors" icon="store" label="Vendors" />
+                <SidebarItem id="products" icon="box" label="Products" />
+                <SidebarItem id="logistics" icon="motorcycle" label="Logistics" />
+                <SidebarItem id="orders" icon="receipt" label="All Orders" />
+            </div>
+
+            <div className="pt-4 border-t border-gray-800">
+                <div 
+                    onClick={() => { logout(); navigate('/'); }}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer text-red-400 hover:bg-gray-800 hover:text-red-300 transition-all"
+                >
+                    <i className="fa-solid fa-arrow-right-from-bracket w-5"></i>
+                    <span className="font-bold text-sm">Logout</span>
+                </div>
+            </div>
         </div>
 
-        <div className="max-w-6xl mx-auto p-6 space-y-8">
+        {/* Main Content */}
+        <div className="flex-1 ml-64 p-8">
             
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-5 border-l-4 border-yellow-400">
-                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pending Products</h3>
-                     <p className="text-3xl font-display font-bold mt-1 text-gray-900">{products.filter(p => p.status === 'pending').length}</p>
-                </Card>
-                <Card className="p-5 border-l-4 border-green-500">
-                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Approved</h3>
-                     <p className="text-3xl font-display font-bold mt-1 text-gray-900">{products.filter(p => p.status === 'approved').length}</p>
-                </Card>
-                <Card className="p-5 border-l-4 border-blue-500">
-                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Delivery Requests</h3>
-                     <p className="text-3xl font-display font-bold mt-1 text-gray-900">{pendingDelivery.length}</p>
-                </Card>
-            </div>
-
-            {/* Product Management Section */}
-            <section>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-gray-800">Product Management</h2>
+            {/* Header */}
+            <header className="flex justify-between items-center mb-8">
+                <h1 className="text-2xl font-display font-bold text-gray-900 capitalize">{view.replace('_', ' ')}</h1>
+                <div className="flex items-center gap-4">
+                    <span className="bg-white px-4 py-2 rounded-full text-xs font-bold shadow-sm border border-gray-100 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> System Online
+                    </span>
+                    <Avatar name="Admin User" size="sm" />
                 </div>
+            </header>
 
-                {/* Tabs */}
-                <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                    {['pending', 'approved', 'rejected', 'all'].map(tab => (
-                        <button 
-                            key={tab}
-                            onClick={() => setActiveTab(tab as any)}
-                            className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${activeTab === tab ? 'bg-gray-900 text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-                        >
-                            {tab}
-                        </button>
-                    ))}
-                </div>
+            {/* VIEWS */}
 
-                <div className="bg-white rounded-2xl shadow-card overflow-hidden border border-gray-100">
-                    {filteredProducts.length === 0 ? (
-                        <div className="p-10 text-center text-gray-400">
-                            <i className="fa-solid fa-box-open text-3xl mb-3 opacity-50"></i>
-                            <p>No products found in {activeTab}.</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-100">
-                                <thead className="bg-gray-50/50">
-                                    <tr>
-                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Product</th>
-                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Price</th>
-                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor</th>
-                                        <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-100">
-                                    {filteredProducts.map(p => (
-                                        <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center">
-                                                    <img src={p.images[0] || 'https://via.placeholder.com/40'} className="h-12 w-12 rounded-lg object-cover bg-gray-100 mr-4 shadow-sm" />
-                                                    <div>
-                                                        <div className="text-sm font-bold text-gray-900">{p.title}</div>
-                                                        <Badge color={p.status === 'pending' ? 'yellow' : p.status === 'approved' ? 'green' : 'red'} className="mt-1">
-                                                            {p.status}
-                                                        </Badge>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-600">
-                                                {p.currency}{p.price}
-                                            </td>
-                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {p.vendorId}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                                {/* Action Buttons */}
-                                                {deleteId === p.id ? (
-                                                    <div className="flex items-center justify-end gap-2 animate-fade-in">
-                                                        <span className="text-[10px] text-red-500 font-bold uppercase">Sure?</span>
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); deleteProduct(p.id); setDeleteId(null); }}
-                                                            className="text-white bg-red-500 px-2 py-1 rounded text-xs hover:bg-red-600 transition-colors"
-                                                        >
-                                                            Yes
-                                                        </button>
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); setDeleteId(null); }}
-                                                            className="text-gray-600 bg-gray-200 px-2 py-1 rounded text-xs hover:bg-gray-300 transition-colors"
-                                                        >
-                                                            No
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        {p.status === 'pending' && (
-                                                            <>
-                                                                <button type="button" onClick={(e) => handleStatusUpdate(e, p.id, 'approved')} className="text-green-600 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100 font-bold text-xs transition-colors">Approve</button>
-                                                                <button type="button" onClick={(e) => handleStatusUpdate(e, p.id, 'rejected')} className="text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100 font-bold text-xs transition-colors">Reject</button>
-                                                            </>
-                                                        )}
-                                                        {p.status === 'approved' && (
-                                                            <button type="button" onClick={(e) => handleStatusUpdate(e, p.id, 'rejected')} className="text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg hover:bg-orange-100 font-bold text-xs transition-colors">Suspend</button>
-                                                        )}
-                                                        {p.status === 'rejected' && (
-                                                            <button type="button" onClick={(e) => handleStatusUpdate(e, p.id, 'approved')} className="text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 font-bold text-xs transition-colors">Restore</button>
-                                                        )}
-                                                        
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); setDeleteId(p.id); }}
-                                                            className="text-gray-400 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all inline-flex items-center justify-center" 
-                                                            title="Delete Permanently"
-                                                        >
-                                                            <i className="fa-solid fa-trash"></i>
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            </section>
-
-            {/* Delivery Staff Approvals */}
-            {pendingDelivery.length > 0 && (
-                <section>
-                    <h2 className="text-lg font-bold mb-4 text-gray-800">Pending Delivery Staff</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingDelivery.map(dp => (
-                            <Card key={dp.id} className="p-5 flex justify-between items-center border border-blue-100 bg-blue-50/30">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <p className="font-bold text-gray-900">{dp.fullName}</p>
-                                        <Badge color="blue">New</Badge>
-                                    </div>
-                                    <p className="text-sm text-gray-500 capitalize"><i className="fa-solid fa-bicycle mr-1"></i> {dp.vehicleType}</p>
-                                </div>
-                                <div className="space-x-2">
-                                    <Button size="sm" onClick={() => approveDeliveryPerson(dp.id, dp.userId)} className="shadow-none">Approve</Button>
-                                </div>
-                            </Card>
-                        ))}
+            {view === 'dashboard' && (
+                <div className="space-y-6 animate-fade-in">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-4 gap-4">
+                        <Card className="p-5 border-l-4 border-primary">
+                            <p className="text-xs font-bold text-gray-400 uppercase">Total Revenue</p>
+                            <h2 className="text-2xl font-bold text-gray-900 mt-1">₵{revenue.toFixed(2)}</h2>
+                        </Card>
+                        <Card className="p-5 border-l-4 border-accent">
+                            <p className="text-xs font-bold text-gray-400 uppercase">Total Orders</p>
+                            <h2 className="text-2xl font-bold text-gray-900 mt-1">{orders.length}</h2>
+                        </Card>
+                        <Card className="p-5 border-l-4 border-green-500">
+                            <p className="text-xs font-bold text-gray-400 uppercase">Active Users</p>
+                            <h2 className="text-2xl font-bold text-gray-900 mt-1">{users.length}</h2>
+                        </Card>
+                        <Card className="p-5 border-l-4 border-yellow-500">
+                            <p className="text-xs font-bold text-gray-400 uppercase">Pending Items</p>
+                            <h2 className="text-2xl font-bold text-gray-900 mt-1">{pendingProducts.length + pendingVendors.length + pendingRiders.length}</h2>
+                        </Card>
                     </div>
-                </section>
+
+                    {/* Pending Actions */}
+                    <div className="grid grid-cols-2 gap-6">
+                        <Card className="p-6">
+                            <h3 className="font-bold text-gray-800 mb-4">Pending Approvals</h3>
+                            <div className="space-y-3">
+                                {pendingProducts.slice(0, 3).map(p => (
+                                    <div key={p.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-gray-200 rounded-lg overflow-hidden">
+                                                <img src={p.images[0]} className="w-full h-full object-cover" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold">{p.title}</p>
+                                                <p className="text-xs text-gray-500">Product</p>
+                                            </div>
+                                        </div>
+                                        <Button size="sm" onClick={() => setView('products')}>Review</Button>
+                                    </div>
+                                ))}
+                                {pendingVendors.slice(0, 3).map(v => (
+                                    <div key={v.vendorId} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
+                                        <div>
+                                            <p className="text-sm font-bold">{v.storeName}</p>
+                                            <p className="text-xs text-gray-500">Vendor Application</p>
+                                        </div>
+                                        <Button size="sm" onClick={() => setView('vendors')}>Review</Button>
+                                    </div>
+                                ))}
+                                {pendingProducts.length === 0 && pendingVendors.length === 0 && <p className="text-sm text-gray-400">No pending approvals.</p>}
+                            </div>
+                        </Card>
+                        <Card className="p-6">
+                             <h3 className="font-bold text-gray-800 mb-4">Recent Orders</h3>
+                             {/* Header Row */}
+                             <div className="grid grid-cols-3 gap-2 mb-2 px-2">
+                                 <span className="text-xs font-bold text-gray-400 uppercase">ID</span>
+                                 <span className="text-xs font-bold text-gray-400 uppercase">Amount</span>
+                                 <span className="text-xs font-bold text-gray-400 uppercase text-right">Status</span>
+                             </div>
+                             <div className="space-y-2">
+                                 {orders.slice(0, 5).map(o => (
+                                     <div key={o.id} className="grid grid-cols-3 gap-2 text-sm py-2 border-b border-gray-50 items-center hover:bg-gray-50 rounded px-2 transition-colors">
+                                         <span className="font-mono text-gray-500">#{o.id.slice(-4)}</span>
+                                         <span className="font-bold">₵{o.total.toFixed(2)}</span>
+                                         <div className="text-right">
+                                             <Badge color={o.status === 'delivered' ? 'green' : 'blue'}>{o.status}</Badge>
+                                         </div>
+                                     </div>
+                                 ))}
+                                 {orders.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No orders yet.</p>}
+                             </div>
+                        </Card>
+                    </div>
+                </div>
             )}
 
+            {view === 'users' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-50 text-xs uppercase text-gray-400">
+                            <tr>
+                                <th className="px-6 py-4">User</th>
+                                <th className="px-6 py-4">Role</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {users.map(u => (
+                                <tr key={u.id}>
+                                    <td className="px-6 py-4 flex items-center gap-3">
+                                        <Avatar name={u.name} src={u.avatarUrl} size="sm" />
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-900">{u.name}</p>
+                                            <p className="text-xs text-gray-400">{u.email}</p>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {u.roles.map(r => <Badge key={r} color="gray" className="mr-1">{r}</Badge>)}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {u.isBanned ? <Badge color="red">Banned</Badge> : <Badge color="green">Active</Badge>}
+                                    </td>
+                                    <td className="px-6 py-4 text-right space-x-2">
+                                        <Button size="sm" variant={u.isBanned ? 'success' : 'danger'} onClick={() => banUser(u.id, !u.isBanned)}>
+                                            {u.isBanned ? 'Unban' : 'Ban'}
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {view === 'products' && (
+                 <div className="grid grid-cols-1 gap-4">
+                     {products.map(p => (
+                         <div key={p.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                             <div className="flex items-center gap-4">
+                                 <img src={p.images[0]} className="w-16 h-16 rounded-lg object-cover bg-gray-100" />
+                                 <div>
+                                     <h3 className="font-bold text-gray-900">{p.title}</h3>
+                                     <p className="text-xs text-gray-500">Vendor: {p.vendorId} • ₵{p.price}</p>
+                                 </div>
+                             </div>
+                             <div className="flex items-center gap-3">
+                                 <Badge color={p.status === 'approved' ? 'green' : p.status === 'pending' ? 'yellow' : 'red'}>{p.status}</Badge>
+                                 {p.status === 'pending' && (
+                                     <>
+                                        <Button size="sm" variant="success" onClick={() => updateProductStatus(p.id, 'approved')}>Approve</Button>
+                                        <Button size="sm" variant="danger" onClick={() => updateProductStatus(p.id, 'rejected')}>Reject</Button>
+                                     </>
+                                 )}
+                                 <Button size="sm" variant="ghost" icon="trash" onClick={() => deleteProduct(p.id)}></Button>
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+            )}
+
+            {view === 'vendors' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {vendors.map(v => (
+                        <Card key={v.vendorId} className="p-5 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <Avatar src={v.storeAvatarUrl} name={v.storeName} />
+                                <div>
+                                    <p className="font-bold">{v.storeName}</p>
+                                    <p className="text-xs text-gray-500">{v.location}</p>
+                                </div>
+                            </div>
+                            <div>
+                                {v.isApproved ? (
+                                    <Button size="sm" variant="outline" onClick={() => approveVendor(v.vendorId, false)}>Suspend</Button>
+                                ) : (
+                                    <Button size="sm" variant="success" onClick={() => approveVendor(v.vendorId, true)}>Approve</Button>
+                                )}
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
+            
+            {view === 'logistics' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="font-bold text-gray-800 mb-3">Rider Applications</h3>
+                        {pendingRiders.length === 0 ? <p className="text-sm text-gray-400">No pending applications.</p> : (
+                            <div className="grid grid-cols-2 gap-4">
+                                {pendingRiders.map(r => (
+                                    <Card key={r.id} className="p-4 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold">{r.fullName}</p>
+                                            <Badge color="blue">{r.vehicleType}</Badge>
+                                        </div>
+                                        <div className="space-x-2">
+                                            <Button size="sm" variant="success" onClick={() => approveDeliveryPerson(r.id, r.userId, 'approved')}>Approve</Button>
+                                            <Button size="sm" variant="danger" onClick={() => approveDeliveryPerson(r.id, r.userId, 'rejected')}>Reject</Button>
+                                        </div>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-gray-800 mb-3">Active Fleet</h3>
+                        <div className="bg-white rounded-xl border border-gray-100 p-4">
+                            <p className="text-sm text-gray-500">Live map tracking would go here.</p>
+                            <div className="mt-4 space-y-2">
+                                {deliveryPersons.filter(d => d.status === 'approved').map(d => (
+                                    <div key={d.id} className="flex justify-between text-sm py-2 border-b border-gray-50">
+                                        <span>{d.fullName}</span>
+                                        <Badge color="green">Active</Badge>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     </div>
   );

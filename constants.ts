@@ -23,6 +23,23 @@ export const CATEGORIES: Category[] = [
   { id: 'cat-tickets', name: 'Tickets', icon: 'ticket', image: 'https://images.unsplash.com/photo-1540221652346-e5dd6b50f3e7?auto=format&fit=crop&w=300&q=80' },
 ];
 
+// Initial Cache with Major Cities (Speed Optimization) - Exported for use in Search and Home
+export const INITIAL_LOCATION_CACHE: Record<string, [number, number]> = {
+    'legon': [5.6506, -0.1962],
+    'university of ghana': [5.6506, -0.1962],
+    'campus': [5.6506, -0.1962],
+    'tema': [5.6698, 0.0166],
+    'accra': [5.6037, -0.1870],
+    'kumasi': [6.6885, -1.6244],
+    'cape coast': [5.1315, -1.2795],
+    'takoradi': [4.9016, -1.7831],
+    'tamale': [9.4075, -0.8534],
+    'kasoa': [5.5345, -0.4168],
+    'ho': [6.6101, 0.4785],
+    'sunyani': [7.3399, -2.3268],
+    'koforidua': [6.0903, -0.2591]
+};
+
 export const MOCK_USERS: User[] = [
   { id: 'user-1', name: 'Jane Doe', email: 'jane@lynqed.com', roles: ['buyer'], avatarUrl: 'https://ui-avatars.com/api/?name=Jane+Doe&background=0D8ABC&color=fff' },
   { id: 'user-2', name: 'John Vendor', email: 'john@lynqed.com', roles: ['vendor'], avatarUrl: 'https://ui-avatars.com/api/?name=John+Vendor&background=random' },

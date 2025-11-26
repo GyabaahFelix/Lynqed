@@ -28,6 +28,8 @@ export const Login: React.FC = () => {
                 navigate('/admin/dashboard');
             } else if (result.role === 'vendor') {
                 navigate('/vendor/dashboard');
+            } else if (result.role === 'deliveryPerson') {
+                navigate('/delivery/dashboard');
             } else {
                 navigate('/buyer/dashboard');
             }

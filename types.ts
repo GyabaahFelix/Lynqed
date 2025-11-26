@@ -8,6 +8,7 @@ export interface User {
   avatarUrl?: string;
   roles: Role[];
   defaultLocation?: string;
+  isBanned?: boolean; // New
 }
 
 export interface Vendor {
@@ -27,8 +28,10 @@ export interface DeliveryPerson {
   id: string;
   userId: string;
   fullName: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'suspended';
   vehicleType: string;
+  totalDeliveries?: number;
+  rating?: number;
 }
 
 export type ProductStatus = 'pending' | 'approved' | 'rejected';
@@ -55,18 +58,31 @@ export interface CartItem {
   product: Product;
 }
 
-export type OrderStatus = 'placed' | 'received' | 'in_route' | 'ready_for_pickup' | 'delivered' | 'declined' | 'cancelled';
+// Expanded Order Status for granular tracking
+export type OrderStatus = 
+  | 'placed' 
+  | 'received' 
+  | 'preparing'         // Vendor is packing
+  | 'ready_for_pickup'  // Vendor is done, waiting for driver
+  | 'assigned'          // Driver accepted
+  | 'picked_up'         // Driver has item
+  | 'in_route'          // Driver moving to buyer
+  | 'delivered' 
+  | 'declined' 
+  | 'cancelled';
 
 export interface Order {
   id: string;
   buyerId: string;
   vendorId: string;
-  deliveryPersonId?: string; // Added field
+  deliveryPersonId?: string;
   items: CartItem[];
   total: number;
+  deliveryFee?: number;
   status: OrderStatus;
   deliveryOption: 'delivery' | 'pickup';
   createdAt: string;
+  locationCoordinates?: { lat: number; lng: number }; // For distance calc
 }
 
 export interface Category {

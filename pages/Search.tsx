@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
 import { Card } from '../components/UI';
+import { INITIAL_LOCATION_CACHE } from '../constants';
 
 // Define Leaflet on window
 declare global {
@@ -10,23 +11,6 @@ declare global {
         L: any;
     }
 }
-
-// Initial Cache with Major Cities (Speed Optimization)
-const INITIAL_LOCATION_CACHE: Record<string, [number, number]> = {
-    'legon': [5.6506, -0.1962],
-    'university of ghana': [5.6506, -0.1962],
-    'campus': [5.6506, -0.1962],
-    'tema': [5.6698, 0.0166],
-    'accra': [5.6037, -0.1870],
-    'kumasi': [6.6885, -1.6244],
-    'cape coast': [5.1315, -1.2795],
-    'takoradi': [4.9016, -1.7831],
-    'tamale': [9.4075, -0.8534],
-    'kasoa': [5.5345, -0.4168],
-    'ho': [6.6101, 0.4785],
-    'sunyani': [7.3399, -2.3268],
-    'koforidua': [6.0903, -0.2591]
-};
 
 export const SearchPage: React.FC = () => {
   const { products, vendors } = useApp();
