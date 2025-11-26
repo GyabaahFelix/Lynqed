@@ -16,16 +16,25 @@ export const AdminDashboard: React.FC = () => {
   
   const navigate = useNavigate();
   const [view, setView] = useState<AdminView>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Stats
   const revenue = orders.reduce((acc, o) => acc + o.total, 0);
   const pendingProducts = products.filter(p => p.status === 'pending');
   const pendingVendors = vendors.filter(v => !v.isApproved);
   const pendingRiders = deliveryPersons.filter(d => d.status === 'pending');
+  
+  // Calculate ACTUAL active users (excluding banned)
+  const activeUserCount = users.filter(u => !u.isBanned).length;
+
+  const handleSidebarClick = (id: AdminView) => {
+      setView(id);
+      setIsSidebarOpen(false); // Auto-close on mobile selection
+  };
 
   const SidebarItem = ({ id, icon, label }: { id: AdminView, icon: string, label: string }) => (
       <div 
-        onClick={() => setView(id)}
+        onClick={() => handleSidebarClick(id)}
         className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all ${view === id ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
       >
           <i className={`fa-solid fa-${icon} w-5`}></i>
@@ -34,17 +43,51 @@ export const AdminDashboard: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-gray-900 text-white p-4 flex flex-col fixed h-full overflow-y-auto">
-            <div className="flex items-center gap-2 mb-10 px-2 mt-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+        
+        {/* Mobile Header / Toggle */}
+        <div className="lg:hidden bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-40 shadow-md">
+            <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-tr from-primary to-secondary rounded-lg flex items-center justify-center">
                     <i className="fa-solid fa-shield-halved text-sm"></i>
                 </div>
                 <span className="font-display font-extrabold text-lg tracking-tight">Admin<span className="text-primary">Panel</span></span>
             </div>
+            <button onClick={() => setIsSidebarOpen(true)} className="text-white hover:text-primary transition-colors">
+                <i className="fa-solid fa-bars text-2xl"></i>
+            </button>
+        </div>
 
-            <div className="space-y-1 flex-1">
+        {/* Backdrop (Mobile Only) */}
+        {isSidebarOpen && (
+            <div 
+                className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm transition-opacity"
+                onClick={() => setIsSidebarOpen(false)}
+            ></div>
+        )}
+
+        {/* Sidebar */}
+        <div className={`
+            fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 text-white p-4 flex flex-col 
+            transform transition-transform duration-300 ease-in-out
+            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+            lg:translate-x-0 lg:static lg:h-screen lg:sticky lg:top-0
+        `}>
+            {/* Sidebar Header (Desktop) / Close Button (Mobile) */}
+            <div className="flex justify-between items-center mb-10 px-2 mt-4">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-gradient-to-tr from-primary to-secondary rounded-lg flex items-center justify-center">
+                        <i className="fa-solid fa-shield-halved text-sm"></i>
+                    </div>
+                    <span className="font-display font-extrabold text-lg tracking-tight">Admin<span className="text-primary">Panel</span></span>
+                </div>
+                {/* Close Button (Mobile Only) */}
+                <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-400 hover:text-white">
+                    <i className="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div className="space-y-1 flex-1 overflow-y-auto hide-scrollbar">
                 <SidebarItem id="dashboard" icon="chart-line" label="Overview" />
                 <SidebarItem id="users" icon="users" label="User Management" />
                 <SidebarItem id="vendors" icon="store" label="Vendors" />
@@ -53,7 +96,7 @@ export const AdminDashboard: React.FC = () => {
                 <SidebarItem id="orders" icon="receipt" label="All Orders" />
             </div>
 
-            <div className="pt-4 border-t border-gray-800">
+            <div className="pt-4 border-t border-gray-800 mt-auto">
                 <div 
                     onClick={() => { logout(); navigate('/'); }}
                     className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer text-red-400 hover:bg-gray-800 hover:text-red-300 transition-all"
@@ -65,15 +108,21 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 ml-64 p-8">
+        <div className="flex-1 p-4 lg:p-8 overflow-x-hidden">
             
-            {/* Header */}
-            <header className="flex justify-between items-center mb-8">
-                <h1 className="text-2xl font-display font-bold text-gray-900 capitalize">{view.replace('_', ' ')}</h1>
-                <div className="flex items-center gap-4">
-                    <span className="bg-white px-4 py-2 rounded-full text-xs font-bold shadow-sm border border-gray-100 flex items-center gap-2">
+            {/* Header - Enhanced Visual Separation */}
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 gap-4">
+                <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                        <i className={`fa-solid fa-${view === 'dashboard' ? 'chart-line' : view === 'users' ? 'users' : view === 'vendors' ? 'store' : view === 'logistics' ? 'motorcycle' : 'box'} text-lg`}></i>
+                     </div>
+                     <h1 className="text-2xl font-display font-bold text-gray-900 capitalize">{view.replace('_', ' ')}</h1>
+                </div>
+                <div className="flex items-center gap-4 ml-auto md:ml-0">
+                    <span className="bg-green-50 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold text-green-700 shadow-sm border border-green-100 flex items-center gap-2 whitespace-nowrap">
                         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> System Online
                     </span>
+                    <div className="h-8 w-px bg-gray-200 mx-2 hidden md:block"></div>
                     <Avatar name="Admin User" size="sm" />
                 </div>
             </header>
@@ -83,7 +132,7 @@ export const AdminDashboard: React.FC = () => {
             {view === 'dashboard' && (
                 <div className="space-y-6 animate-fade-in">
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <Card className="p-5 border-l-4 border-primary">
                             <p className="text-xs font-bold text-gray-400 uppercase">Total Revenue</p>
                             <h2 className="text-2xl font-bold text-gray-900 mt-1">₵{revenue.toFixed(2)}</h2>
@@ -94,7 +143,7 @@ export const AdminDashboard: React.FC = () => {
                         </Card>
                         <Card className="p-5 border-l-4 border-green-500">
                             <p className="text-xs font-bold text-gray-400 uppercase">Active Users</p>
-                            <h2 className="text-2xl font-bold text-gray-900 mt-1">{users.length}</h2>
+                            <h2 className="text-2xl font-bold text-gray-900 mt-1">{activeUserCount}</h2>
                         </Card>
                         <Card className="p-5 border-l-4 border-yellow-500">
                             <p className="text-xs font-bold text-gray-400 uppercase">Pending Items</p>
@@ -103,7 +152,7 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     {/* Pending Actions */}
-                    <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <Card className="p-6">
                             <h3 className="font-bold text-gray-800 mb-4">Pending Approvals</h3>
                             <div className="space-y-3">
@@ -160,47 +209,49 @@ export const AdminDashboard: React.FC = () => {
 
             {view === 'users' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 text-xs uppercase text-gray-400">
-                            <tr>
-                                <th className="px-6 py-4">User</th>
-                                <th className="px-6 py-4">Role</th>
-                                <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4 text-right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {users.map(u => (
-                                <tr key={u.id}>
-                                    <td className="px-6 py-4 flex items-center gap-3">
-                                        <Avatar name={u.name} src={u.avatarUrl} size="sm" />
-                                        <div>
-                                            <p className="text-sm font-bold text-gray-900">{u.name}</p>
-                                            <p className="text-xs text-gray-400">{u.email}</p>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {u.roles.map(r => <Badge key={r} color="gray" className="mr-1">{r}</Badge>)}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {u.isBanned ? <Badge color="red">Banned</Badge> : <Badge color="green">Active</Badge>}
-                                    </td>
-                                    <td className="px-6 py-4 text-right space-x-2">
-                                        <Button size="sm" variant={u.isBanned ? 'success' : 'danger'} onClick={() => banUser(u.id, !u.isBanned)}>
-                                            {u.isBanned ? 'Unban' : 'Ban'}
-                                        </Button>
-                                    </td>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left min-w-[600px]">
+                            <thead className="bg-gray-50 text-xs uppercase text-gray-400">
+                                <tr>
+                                    <th className="px-6 py-4">User</th>
+                                    <th className="px-6 py-4">Role</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4 text-right">Action</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {users.map(u => (
+                                    <tr key={u.id}>
+                                        <td className="px-6 py-4 flex items-center gap-3">
+                                            <Avatar name={u.name} src={u.avatarUrl} size="sm" />
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-900">{u.name}</p>
+                                                <p className="text-xs text-gray-400">{u.email}</p>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {u.roles.map(r => <Badge key={r} color="gray" className="mr-1">{r}</Badge>)}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {u.isBanned ? <Badge color="red">Banned</Badge> : <Badge color="green">Active</Badge>}
+                                        </td>
+                                        <td className="px-6 py-4 text-right space-x-2">
+                                            <Button size="sm" variant={u.isBanned ? 'success' : 'danger'} onClick={() => banUser(u.id, !u.isBanned)}>
+                                                {u.isBanned ? 'Unban' : 'Ban'}
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
 
             {view === 'products' && (
                  <div className="grid grid-cols-1 gap-4">
                      {products.map(p => (
-                         <div key={p.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                         <div key={p.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                              <div className="flex items-center gap-4">
                                  <img src={p.images[0]} className="w-16 h-16 rounded-lg object-cover bg-gray-100" />
                                  <div>
@@ -208,7 +259,7 @@ export const AdminDashboard: React.FC = () => {
                                      <p className="text-xs text-gray-500">Vendor: {p.vendorId} • ₵{p.price}</p>
                                  </div>
                              </div>
-                             <div className="flex items-center gap-3">
+                             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                                  <Badge color={p.status === 'approved' ? 'green' : p.status === 'pending' ? 'yellow' : 'red'}>{p.status}</Badge>
                                  {p.status === 'pending' && (
                                      <>
@@ -251,7 +302,7 @@ export const AdminDashboard: React.FC = () => {
                     <div>
                         <h3 className="font-bold text-gray-800 mb-3">Rider Applications</h3>
                         {pendingRiders.length === 0 ? <p className="text-sm text-gray-400">No pending applications.</p> : (
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {pendingRiders.map(r => (
                                     <Card key={r.id} className="p-4 flex justify-between items-center">
                                         <div>
@@ -272,16 +323,54 @@ export const AdminDashboard: React.FC = () => {
                         <div className="bg-white rounded-xl border border-gray-100 p-4">
                             <p className="text-sm text-gray-500">Live map tracking would go here.</p>
                             <div className="mt-4 space-y-2">
-                                {deliveryPersons.filter(d => d.status === 'approved').map(d => (
-                                    <div key={d.id} className="flex justify-between text-sm py-2 border-b border-gray-50">
-                                        <span>{d.fullName}</span>
-                                        <Badge color="green">Active</Badge>
+                                {deliveryPersons.filter(d => d.status !== 'pending' && d.status !== 'rejected').map(d => (
+                                    <div key={d.id} className="flex justify-between items-center text-sm py-2 border-b border-gray-50 last:border-0">
+                                        <span className="font-medium text-gray-900">{d.fullName}</span>
+                                        <div className="flex items-center gap-4">
+                                            {d.status === 'approved' ? (
+                                                <Badge color="green">Active</Badge> 
+                                            ) : d.status === 'suspended' ? (
+                                                <Badge color="red">Suspended</Badge>
+                                            ) : (
+                                                <Badge color="gray">{d.status}</Badge>
+                                            )}
+                                            
+                                            {/* Admin Action to Suspend/Reactivate - Fixed Alignment */}
+                                            {d.status === 'approved' ? (
+                                                <button onClick={() => approveDeliveryPerson(d.id, d.userId, 'suspended' as any)} className="text-[10px] text-red-500 hover:text-red-700 font-bold underline transition-colors">Suspend</button>
+                                            ) : (
+                                                <button onClick={() => approveDeliveryPerson(d.id, d.userId, 'approved')} className="text-[10px] text-green-500 hover:text-green-700 font-bold underline transition-colors">Reactivate</button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
+                                {deliveryPersons.filter(d => d.status !== 'pending').length === 0 && <p className="text-sm text-gray-400">No active drivers.</p>}
                             </div>
                         </div>
                     </div>
                 </div>
+            )}
+
+            {view === 'orders' && (
+                 <div className="grid grid-cols-1 gap-4">
+                     {orders.map(o => (
+                         <Card key={o.id} className="p-4">
+                             <div className="flex justify-between items-start mb-2">
+                                 <div>
+                                     <h3 className="font-bold">Order #{o.id.slice(-4)}</h3>
+                                     <p className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleString()}</p>
+                                 </div>
+                                 <Badge color={o.status === 'delivered' ? 'green' : 'blue'}>{o.status}</Badge>
+                             </div>
+                             <div className="text-sm text-gray-700 mb-2">
+                                 Items: {o.items.length} | Total: ₵{o.total.toFixed(2)}
+                             </div>
+                             <div className="text-xs text-gray-500">
+                                 Buyer ID: {o.buyerId.slice(0,8)}... | Vendor ID: {o.vendorId}
+                             </div>
+                         </Card>
+                     ))}
+                 </div>
             )}
         </div>
     </div>

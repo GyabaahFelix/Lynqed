@@ -10,12 +10,34 @@ export const DeliveryDashboard: React.FC = () => {
     // Get current rider profile
     const me = deliveryPersons.find(d => d.userId === currentUser?.id);
     
-    if (!me || me.status !== 'approved') return (
+    // 1. Check for Pending
+    if (!me || me.status === 'pending') return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
             <div>
                 <i className="fa-solid fa-clock text-4xl text-yellow-500 mb-4"></i>
                 <h2 className="text-xl font-bold text-gray-900">Account Pending</h2>
                 <p className="text-gray-500 mt-2">Your delivery application is under review by admin.</p>
+            </div>
+        </div>
+    );
+
+    // 2. Check for Suspended
+    if (me.status === 'suspended') return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
+            <div>
+                <i className="fa-solid fa-ban text-4xl text-red-500 mb-4"></i>
+                <h2 className="text-xl font-bold text-gray-900">Account Suspended</h2>
+                <p className="text-gray-500 mt-2">Your delivery privileges have been revoked. Please contact admin support.</p>
+            </div>
+        </div>
+    );
+
+    if (me.status === 'rejected') return (
+         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
+            <div>
+                <i className="fa-solid fa-circle-xmark text-4xl text-red-500 mb-4"></i>
+                <h2 className="text-xl font-bold text-gray-900">Application Rejected</h2>
+                <p className="text-gray-500 mt-2">Your delivery application was not approved.</p>
             </div>
         </div>
     );
