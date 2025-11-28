@@ -1,24 +1,37 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context';
 import { Button, Input } from '../components/UI';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Role } from '../types';
+import { supabase } from '../supabaseClient';
 
 export const Login: React.FC = () => {
-    const { login } = useApp();
+    const { login, resetPassword, updatePassword, showToast } = useApp();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [isResetting, setIsResetting] = useState(false);
+    const [isUpdateMode, setIsUpdateMode] = useState(false);
+
+    // Detect if user is here from a password recovery link
+    useEffect(() => {
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === "PASSWORD_RECOVERY") {
+                setIsUpdateMode(true);
+            }
+        });
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
 
-        // For this local DB version, password validation is mocked (any password works if email exists)
         const result = await login(email, password);
         
         setIsLoading(false);
@@ -38,6 +51,39 @@ export const Login: React.FC = () => {
         }
     };
 
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+
+        const result = await resetPassword(email);
+        setIsLoading(false);
+
+        if (result.success) {
+            showToast("Password reset email sent!", "success");
+            setIsResetting(false); // Switch back to login view
+        } else {
+            setError(result.error || 'Failed to send reset email.');
+        }
+    };
+
+    const handleUpdatePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+
+        const result = await updatePassword(password);
+        setIsLoading(false);
+
+        if (result.success) {
+            showToast("Password updated successfully!", "success");
+            setIsUpdateMode(false);
+            navigate('/buyer/dashboard');
+        } else {
+            setError(result.error || 'Failed to update password.');
+        }
+    };
+
     return (
         <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
             {/* Decorations */}
@@ -50,8 +96,12 @@ export const Login: React.FC = () => {
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-secondary text-white text-2xl shadow-glow mb-4">
                          <i className="fa-solid fa-bolt"></i>
                     </div>
-                    <h1 className="text-3xl font-display font-extrabold text-gray-900">Welcome Back</h1>
-                    <p className="text-gray-500 mt-2">Sign in to continue to LYNQED</p>
+                    <h1 className="text-3xl font-display font-extrabold text-gray-900">
+                        {isUpdateMode ? 'Set New Password' : isResetting ? 'Reset Password' : 'Welcome Back'}
+                    </h1>
+                    <p className="text-gray-500 mt-2">
+                        {isUpdateMode ? 'Create a secure password' : isResetting ? 'Enter your email to receive instructions' : 'Sign in to continue to LYNQED'}
+                    </p>
                 </div>
 
                 {error && (
@@ -61,41 +111,108 @@ export const Login: React.FC = () => {
                     </div>
                 )}
 
-                <form onSubmit={handleLogin} className="space-y-6">
-                    <Input 
-                        label="Email Address" 
-                        icon="envelope" 
-                        type="email"
-                        placeholder="you@university.edu" 
-                        value={email} 
-                        onChange={e => setEmail(e.target.value)} 
-                        required
-                    />
-                    
-                    <Input 
-                        label="Password" 
-                        icon="lock" 
-                        type="password"
-                        placeholder="••••••••" 
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        required
-                    />
+                {isUpdateMode ? (
+                    <form onSubmit={handleUpdatePassword} className="space-y-6">
+                        <Input 
+                            label="New Password" 
+                            icon="lock" 
+                            type="password"
+                            placeholder="New secure password" 
+                            value={password}
+                            onChange={e => setPassword(e.target.value)} 
+                            required
+                            minLength={6}
+                        />
+                         <Button 
+                            fullWidth 
+                            size="lg" 
+                            type="submit"
+                            disabled={isLoading}
+                            className="shadow-xl shadow-primary/30"
+                        >
+                            {isLoading ? 'Updating...' : 'Update Password'}
+                        </Button>
+                    </form>
+                ) : isResetting ? (
+                    <form onSubmit={handleResetPassword} className="space-y-6">
+                        <Input 
+                            label="Email Address" 
+                            icon="envelope" 
+                            type="email"
+                            placeholder="you@university.edu" 
+                            value={email} 
+                            onChange={e => setEmail(e.target.value)} 
+                            required
+                        />
+                         <Button 
+                            fullWidth 
+                            size="lg" 
+                            type="submit"
+                            disabled={isLoading}
+                            className="shadow-xl shadow-primary/30"
+                        >
+                            {isLoading ? 'Sending Link...' : 'Send Reset Link'}
+                        </Button>
+                        <div className="text-center mt-4">
+                            <button 
+                                type="button" 
+                                onClick={() => { setIsResetting(false); setError(''); }} 
+                                className="text-sm text-gray-500 hover:text-gray-900 font-medium"
+                            >
+                                Back to Login
+                            </button>
+                        </div>
+                    </form>
+                ) : (
+                    <form onSubmit={handleLogin} className="space-y-6">
+                        <Input 
+                            label="Email Address" 
+                            icon="envelope" 
+                            type="email"
+                            placeholder="you@university.edu" 
+                            value={email} 
+                            onChange={e => setEmail(e.target.value)} 
+                            required
+                        />
+                        
+                        <div>
+                            <Input 
+                                label="Password" 
+                                icon="lock" 
+                                type="password"
+                                placeholder="••••••••" 
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                required
+                            />
+                            <div className="flex justify-end -mt-3 mb-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => { setIsResetting(true); setError(''); }}
+                                    className="text-xs font-bold text-primary hover:text-primaryDark transition-colors"
+                                >
+                                    Forgot Password?
+                                </button>
+                            </div>
+                        </div>
 
-                    <Button 
-                        fullWidth 
-                        size="lg" 
-                        type="submit"
-                        disabled={isLoading}
-                        className="shadow-xl shadow-primary/30"
-                    >
-                        {isLoading ? 'Signing in...' : 'Sign In'}
-                    </Button>
-                </form>
+                        <Button 
+                            fullWidth 
+                            size="lg" 
+                            type="submit"
+                            disabled={isLoading}
+                            className="shadow-xl shadow-primary/30"
+                        >
+                            {isLoading ? 'Signing in...' : 'Sign In'}
+                        </Button>
+                    </form>
+                )}
 
-                <div className="mt-8 text-center text-sm text-gray-500">
-                    Don't have an account? <Link to="/register" className="font-bold text-primary hover:text-primaryDark transition-colors">Create Account</Link>
-                </div>
+                {!isResetting && !isUpdateMode && (
+                    <div className="mt-8 text-center text-sm text-gray-500">
+                        Don't have an account? <Link to="/register" className="font-bold text-primary hover:text-primaryDark transition-colors">Create Account</Link>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -104,10 +221,16 @@ export const Login: React.FC = () => {
 export const Register: React.FC = () => {
     const { signup } = useApp();
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Check if a role was passed in state (e.g., from "Start Selling" button)
+    const preSelectedRole = location.state?.role as Role | undefined;
+
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<Role>('buyer');
+    // Default to 'buyer', or the pre-selected role if available
+    const [role, setRole] = useState<Role>(preSelectedRole || 'buyer');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -177,23 +300,31 @@ export const Register: React.FC = () => {
                         minLength={6}
                     />
 
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1">I want to...</label>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div 
-                                onClick={() => setRole('buyer')}
-                                className={`cursor-pointer rounded-2xl p-3 border-2 text-center transition-all ${role === 'buyer' ? 'border-primary bg-primary/5 text-primary font-bold' : 'border-gray-100 text-gray-500'}`}
-                            >
-                                Buy Products
-                            </div>
-                            <div 
-                                onClick={() => setRole('vendor')}
-                                className={`cursor-pointer rounded-2xl p-3 border-2 text-center transition-all ${role === 'vendor' ? 'border-secondary bg-secondary/5 text-secondary font-bold' : 'border-gray-100 text-gray-500'}`}
-                            >
-                                Sell Items
+                    {/* Only show role selection if NOT pre-selected */}
+                    {!preSelectedRole ? (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1">I want to...</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div 
+                                    onClick={() => setRole('buyer')}
+                                    className={`cursor-pointer rounded-2xl p-3 border-2 text-center transition-all ${role === 'buyer' ? 'border-primary bg-primary/5 text-primary font-bold' : 'border-gray-100 text-gray-500'}`}
+                                >
+                                    Buy Products
+                                </div>
+                                <div 
+                                    onClick={() => setRole('vendor')}
+                                    className={`cursor-pointer rounded-2xl p-3 border-2 text-center transition-all ${role === 'vendor' ? 'border-secondary bg-secondary/5 text-secondary font-bold' : 'border-gray-100 text-gray-500'}`}
+                                >
+                                    Sell Items
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        // Show badge indicating pre-selected role
+                        <div className="bg-secondary/10 border border-secondary/20 p-3 rounded-xl flex items-center justify-center text-secondary text-sm font-bold">
+                            <i className="fa-solid fa-store mr-2"></i> Registering as a Vendor
+                        </div>
+                    )}
 
                     <Button 
                         fullWidth 

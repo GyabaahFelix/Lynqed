@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
@@ -11,7 +10,7 @@ export const Welcome: React.FC = () => {
 
   const handleStartSelling = () => {
       if (!currentUser) {
-          navigate('/register');
+          navigate('/register', { state: { role: 'vendor' } });
       } else if (currentUser.roles.includes('vendor')) {
           navigate('/vendor/dashboard');
       } else {
@@ -194,7 +193,7 @@ export const BuyerDashboard: React.FC = () => {
 
   const handleStartSelling = () => {
       if (!currentUser) {
-          navigate('/register');
+          navigate('/register', { state: { role: 'vendor' } });
       } else if (currentUser.roles.includes('vendor')) {
           navigate('/vendor/dashboard');
       } else {

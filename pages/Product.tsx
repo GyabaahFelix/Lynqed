@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context';
-import { Button, Badge, Card, Input, Avatar } from '../components/UI';
+import { Button, Badge, Card, Input, Avatar, Spinner } from '../components/UI';
 import { Product } from '../types';
 
 export const StorePage: React.FC = () => {
@@ -70,11 +70,11 @@ export const StorePage: React.FC = () => {
                                     className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 hover:shadow-xl transition-all duration-300 group relative flex flex-col h-full cursor-pointer"
                                     onClick={() => navigate(`/buyer/product/${product.id}`)}
                                 >
-                                    <div className="aspect-square w-full relative overflow-hidden bg-gray-50">
+                                    <div className="aspect-[4/5] w-full relative overflow-hidden bg-white">
                                         <img 
                                             src={product.images[0]} 
                                             alt={product.title} 
-                                            className="w-full h-full object-contain p-2 transition-transform duration-700 group-hover:scale-110" 
+                                            className="w-full h-full object-cover p-0 transition-transform duration-700 group-hover:scale-110" 
                                         />
                                         <button 
                                             className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90"
@@ -89,10 +89,10 @@ export const StorePage: React.FC = () => {
                                     </div>
                                     <div className="p-3 bg-white flex flex-col justify-between flex-grow relative z-10">
                                         <div>
-                                            <h3 className="text-sm text-gray-800 font-bold leading-tight line-clamp-2 mb-1">{product.title}</h3>
+                                            <h3 className="text-xs text-gray-800 font-bold leading-tight line-clamp-2 mb-1">{product.title}</h3>
                                         </div>
                                         <div className="flex items-center justify-between mt-2">
-                                            <span className="text-lg font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
+                                            <span className="text-sm font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
                                             <button 
                                                 className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all shadow-md active:scale-90 group-btn ${product.stock === 0 ? 'bg-gray-300 cursor-not-allowed' : isInCart ? 'bg-green-500 hover:bg-red-500' : 'bg-black hover:bg-primary'}`}
                                                 onClick={(e) => {
@@ -122,150 +122,229 @@ export const ProductDetail: React.FC = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { products, addToCart, cart, removeFromCart, updateCartQuantity, vendors, favorites, toggleFavorite } = useApp();
+    const [selectedImageIndex, setSelectedImageIndex] = useState(0);
     
     const product = products.find(p => p.id === id);
     const vendor = vendors.find(v => v.vendorId === product?.vendorId);
     
-    const [preAddQuantity, setPreAddQuantity] = useState(1);
+    // Recommendations
+    const relatedProducts = products
+        .filter(p => p.category === product?.category && p.id !== product?.id)
+        .slice(0, 4);
+
+    const [quantity, setQuantity] = useState(1);
     
-    if (!product) return <div className="p-8 text-center text-gray-500">Product not found</div>;
+    if (!product) return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
 
     const cartItem = cart.find(i => i.productId === product.id);
     const isInCart = !!cartItem;
     const isFav = favorites.includes(product.id);
     
-    const currentQuantity = cartItem ? cartItem.quantity : preAddQuantity;
+    // Sync local quantity with cart if present
+    useEffect(() => {
+        if (cartItem) setQuantity(cartItem.quantity);
+    }, [cartItem]);
 
-    const handleQuantityChange = (delta: number) => {
-        const newQty = Math.max(1, currentQuantity + delta);
-        if (newQty > product.stock) return;
-
-        if (isInCart) {
-            updateCartQuantity(product.id, newQty);
-        } else {
-            setPreAddQuantity(newQty);
-        }
+    const handleQuantity = (delta: number) => {
+        const newQ = Math.max(1, Math.min(product.stock, quantity + delta));
+        setQuantity(newQ);
+        if (isInCart) updateCartQuantity(product.id, newQ);
     };
 
-    const handleAction = () => {
+    const handleAddToCart = () => {
         if (isInCart) {
             removeFromCart(product.id);
         } else {
-            addToCart(product, preAddQuantity);
+            addToCart(product, quantity);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-24 animate-fade-in relative flex flex-col">
-             {/* Header Navigation (Absolute) */}
-             <div className="absolute top-0 left-0 right-0 p-4 z-20 flex justify-between items-center">
-                <button 
-                    onClick={() => navigate(-1)} 
-                    className="w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center text-gray-800 hover:bg-white shadow-sm transition-all"
-                >
+        <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in">
+            {/* Breadcrumbs & Header */}
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-30 px-4 py-3 flex items-center gap-3 shadow-sm">
+                <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-900">
                     <i className="fa-solid fa-arrow-left"></i>
                 </button>
-                <button 
-                    onClick={() => toggleFavorite(product.id)} 
-                    className={`w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-all ${isFav ? 'text-red-500' : 'text-gray-400'}`}
-                >
-                    <i className={`${isFav ? 'fa-solid' : 'fa-regular'} fa-heart`}></i>
-                </button>
-             </div>
+                <div className="text-xs text-gray-500 breadcrumbs flex items-center gap-2 overflow-hidden whitespace-nowrap">
+                    <Link to="/buyer/dashboard" className="hover:text-primary">Home</Link>
+                    <i className="fa-solid fa-chevron-right text-[8px]"></i>
+                    <span>{product.category}</span>
+                    <i className="fa-solid fa-chevron-right text-[8px]"></i>
+                    <span className="text-gray-900 font-bold truncate">{product.title}</span>
+                </div>
+                <div className="ml-auto flex gap-3">
+                    <button onClick={() => toggleFavorite(product.id)} className={`${isFav ? 'text-red-500' : 'text-gray-400'} hover:text-red-600 transition-colors`}>
+                        <i className={`${isFav ? 'fa-solid' : 'fa-regular'} fa-heart text-lg`}></i>
+                    </button>
+                    <button onClick={() => {
+                        if (navigator.share) navigator.share({ title: product.title, url: window.location.href });
+                        else alert("Link copied!");
+                    }} className="text-gray-400 hover:text-blue-500">
+                        <i className="fa-solid fa-share-nodes text-lg"></i>
+                    </button>
+                </div>
+            </div>
 
-             {/* Full Screen Image Container - IMPROVED VISIBILITY */}
-             <div className="relative h-[45vh] w-full bg-gray-100 overflow-hidden flex items-center justify-center">
-                <div 
-                    className="absolute inset-0 bg-cover bg-center blur-xl opacity-50 scale-110"
-                    style={{ backgroundImage: `url(${product.images[0]})` }}
-                ></div>
-                <img 
-                    src={product.images[0]} 
-                    className="relative z-10 max-h-full max-w-full object-contain shadow-lg" 
-                    alt={product.title} 
-                />
-             </div>
-
-             {/* Content Sheet */}
-             <div className="relative -mt-6 bg-white rounded-t-[2rem] p-6 flex-grow shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-10">
-                <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
-                
-                <div className="flex justify-between items-start mb-4">
-                    <div>
-                        <h1 className="text-xl font-display font-bold text-gray-900 leading-tight mb-2">{product.title}</h1>
-                        <div className="flex items-center gap-2" onClick={() => navigate(`/store/${vendor?.vendorId}`)}>
-                            <Avatar src={vendor?.storeAvatarUrl} name={vendor?.storeName || 'Vendor'} size="sm" />
-                            <span className="text-sm font-medium text-gray-600 underline decoration-gray-300 underline-offset-2">{vendor?.storeName}</span>
+            <div className="max-w-7xl mx-auto p-4 md:p-8">
+                <div className="bg-white rounded-2xl shadow-card overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-8">
+                    
+                    {/* Left: Image Gallery */}
+                    <div className="p-4 md:p-8 bg-white flex flex-col gap-4">
+                        <div className="aspect-square w-full bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 relative group">
+                            <img 
+                                src={product.images[selectedImageIndex]} 
+                                alt={product.title} 
+                                className="w-full h-full object-contain mix-blend-multiply transition-transform duration-500 group-hover:scale-105" 
+                            />
+                            {product.stock === 0 && (
+                                <div className="absolute top-4 left-4 bg-red-600 text-white text-xs font-bold px-3 py-1 rounded shadow-sm">
+                                    SOLD OUT
+                                </div>
+                            )}
                         </div>
+                        {/* Thumbnails */}
+                        {product.images.length > 1 && (
+                            <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+                                {product.images.map((img, idx) => (
+                                    <div 
+                                        key={idx} 
+                                        onClick={() => setSelectedImageIndex(idx)}
+                                        className={`w-16 h-16 rounded-lg border-2 cursor-pointer overflow-hidden flex-shrink-0 ${selectedImageIndex === idx ? 'border-primary' : 'border-gray-100 hover:border-gray-300'}`}
+                                    >
+                                        <img src={img} className="w-full h-full object-cover" />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                    <div className="text-right">
-                        <span className="block text-2xl font-extrabold text-primary">{product.currency}{product.price.toFixed(2)}</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${product.stock > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                            {product.stock > 0 ? `${product.stock} In Stock` : 'Sold Out'}
-                        </span>
+
+                    {/* Right: Product Info */}
+                    <div className="p-4 md:p-8 md:border-l border-gray-100 flex flex-col">
+                        <div className="mb-4">
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{product.category}</span>
+                            <h1 className="text-2xl md:text-3xl font-display font-bold text-gray-900 mt-1 leading-tight">{product.title}</h1>
+                            <div className="flex items-center gap-2 mt-2">
+                                <div className="flex text-yellow-400 text-xs">
+                                    {[1,2,3,4,5].map(i => <i key={i} className={`fa-solid fa-star ${i <= (product.rating||0) ? '' : 'text-gray-200'}`}></i>)}
+                                </div>
+                                <span className="text-xs text-gray-500">(24 verified ratings)</span>
+                            </div>
+                        </div>
+
+                        {/* Price Strip - Franko Style */}
+                        <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-6 flex justify-between items-center">
+                            <div>
+                                <p className="text-xs text-red-400 font-bold uppercase mb-1">Special Price</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-3xl font-black text-red-600">{product.currency}{product.price.toFixed(2)}</span>
+                                    {/* Mock original price for effect */}
+                                    <span className="text-sm text-gray-400 line-through decoration-red-300">{(product.price * 1.2).toFixed(2)}</span>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold border ${product.stock > 0 ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                    {product.stock > 0 ? 'In Stock' : 'Sold Out'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Description */}
+                        <div className="mb-6">
+                            <h3 className="font-bold text-gray-900 text-sm mb-2">Product Details</h3>
+                            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+                                {product.description}
+                            </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="mt-auto border-t border-gray-100 pt-6">
+                            <div className="flex gap-4 mb-4">
+                                {/* Quantity */}
+                                <div className="flex items-center border border-gray-300 rounded-lg h-12 w-32">
+                                    <button 
+                                        onClick={() => handleQuantity(-1)}
+                                        disabled={quantity <= 1}
+                                        className="w-10 h-full flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                                    >
+                                        <i className="fa-solid fa-minus text-xs"></i>
+                                    </button>
+                                    <span className="flex-1 text-center font-bold text-gray-900">{quantity}</span>
+                                    <button 
+                                        onClick={() => handleQuantity(1)}
+                                        disabled={quantity >= product.stock}
+                                        className="w-10 h-full flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                                    >
+                                        <i className="fa-solid fa-plus text-xs"></i>
+                                    </button>
+                                </div>
+                                
+                                {/* Add To Cart - Franko Red/Orange Gradient */}
+                                <button 
+                                    onClick={handleAddToCart}
+                                    disabled={product.stock === 0}
+                                    className={`flex-1 h-12 rounded-lg font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${isInCart ? 'bg-green-600 hover:bg-green-700' : 'bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700'} ${product.stock === 0 ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                                >
+                                    {isInCart ? (
+                                        <>
+                                            <i className="fa-solid fa-check"></i> Added to Cart
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fa-solid fa-cart-shopping"></i> Add to Cart
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            
+                            {/* Vendor Info / Trust */}
+                            <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-100 transition-colors border border-gray-100" onClick={() => navigate(`/store/${vendor?.vendorId}`)}>
+                                <Avatar src={vendor?.storeAvatarUrl} name={vendor?.storeName || 'Vendor'} size="md" />
+                                <div className="flex-1">
+                                    <p className="text-xs text-gray-400 uppercase font-bold">Sold by</p>
+                                    <p className="text-sm font-bold text-gray-900">{vendor?.storeName}</p>
+                                </div>
+                                {vendor?.contactPhone && (
+                                     <a 
+                                        href={`https://wa.me/${vendor.contactPhone.replace(/[^0-9]/g, '').replace(/^0/, '233')}?text=Hi, I saw your product ${product.title} on LYNQED`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white shadow-md hover:scale-110 transition-transform"
+                                    >
+                                        <i className="fa-brands fa-whatsapp text-xl"></i>
+                                    </a>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {vendor?.contactPhone && (
-                     <a 
-                        href={`https://wa.me/${vendor.contactPhone.replace(/[^0-9]/g, '').replace(/^0/, '233')}?text=Hi, I'm interested in ${product.title}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 bg-green-50 p-3 rounded-xl mb-6 hover:bg-green-100 transition-colors cursor-pointer border border-green-100"
-                    >
-                        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200">
-                            <i className="fa-brands fa-whatsapp text-xl"></i>
+                {/* Related Products */}
+                {relatedProducts.length > 0 && (
+                    <div className="mt-12">
+                        <h3 className="font-display font-bold text-xl text-gray-900 mb-6">You May Also Like</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {relatedProducts.map(rp => (
+                                <div 
+                                    key={rp.id}
+                                    onClick={() => {
+                                        navigate(`/buyer/product/${rp.id}`);
+                                        window.scrollTo(0,0);
+                                    }}
+                                    className="bg-white rounded-xl border border-gray-100 p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                                >
+                                    <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden mb-3">
+                                        <img src={rp.images[0]} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                    </div>
+                                    <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{rp.title}</h4>
+                                    <p className="text-red-600 font-bold mt-1">{rp.currency}{rp.price}</p>
+                                </div>
+                            ))}
                         </div>
-                        <div className="flex-1">
-                            <p className="font-bold text-gray-800 text-sm">Chat with Vendor</p>
-                            <p className="text-xs text-green-600">Ask about availability or details</p>
-                        </div>
-                        <i className="fa-solid fa-chevron-right text-green-300 text-xs mr-2"></i>
-                    </a>
+                    </div>
                 )}
-
-                <h3 className="font-bold text-gray-900 mb-2 text-sm uppercase tracking-wide">Description</h3>
-                <p className="text-gray-600 leading-relaxed text-sm mb-8">{product.description}</p>
-             </div>
-
-             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 flex items-center gap-4 z-30 pb-safe shadow-[0_-5px_20px_rgba(0,0,0,0.03)]">
-                <div className="flex items-center bg-gray-100 rounded-2xl p-1">
-                    <button 
-                        onClick={() => handleQuantityChange(-1)}
-                        className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-white rounded-xl transition-all disabled:opacity-30"
-                        disabled={currentQuantity <= 1}
-                    >
-                        <i className="fa-solid fa-minus text-xs"></i>
-                    </button>
-                    <span className="w-8 text-center font-bold text-sm">{currentQuantity}</span>
-                    <button 
-                        onClick={() => handleQuantityChange(1)}
-                        className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-white rounded-xl transition-all disabled:opacity-30"
-                        disabled={currentQuantity >= product.stock}
-                    >
-                        <i className="fa-solid fa-plus text-xs"></i>
-                    </button>
-                </div>
-
-                <Button 
-                    fullWidth 
-                    size="lg" 
-                    variant={isInCart ? 'danger' : 'primary'}
-                    onClick={handleAction}
-                    disabled={product.stock === 0}
-                    className={isInCart ? 'shadow-red-200' : 'shadow-primary/30'}
-                >
-                    {isInCart ? (
-                        <>
-                            <i className="fa-solid fa-trash mr-2"></i> Remove
-                        </>
-                    ) : (
-                        <>
-                            Add to Cart <span className="ml-2 bg-white/20 px-2 py-0.5 rounded text-sm">₵{(product.price * currentQuantity).toFixed(2)}</span>
-                        </>
-                    )}
-                </Button>
-             </div>
+            </div>
         </div>
     );
 };

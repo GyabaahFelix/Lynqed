@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Product, Vendor, Order, CartItem, DeliveryPerson, Role, OrderStatus } from './types';
 import { supabase } from './supabaseClient';
@@ -23,6 +22,8 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<{success: boolean, role?: Role, error?: string}>;
   signup: (email: string, password: string, fullName: string, role: Role) => Promise<{success: boolean, error?: string}>;
   logout: () => void;
+  resetPassword: (email: string) => Promise<{success: boolean, error?: string}>;
+  updatePassword: (password: string) => Promise<{success: boolean, error?: string}>;
   switchRole: (role: Role) => void;
   
   // Registration
@@ -303,6 +304,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCart([]);
   };
 
+  const resetPassword = async (email: string) => {
+      try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: window.location.origin + '/login',
+          });
+          if (error) return { success: false, error: error.message };
+          return { success: true };
+      } catch (e: any) {
+          return { success: false, error: e.message };
+      }
+  };
+
+  const updatePassword = async (password: string) => {
+      try {
+          const { error } = await supabase.auth.updateUser({ password });
+          if (error) return { success: false, error: error.message };
+          return { success: true };
+      } catch (e: any) {
+          return { success: false, error: e.message };
+      }
+  };
+
   const switchRole = (role: Role) => {
       if (currentUser?.roles.includes(role)) {
           setCurrentRole(role);
@@ -542,7 +565,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
         currentUser, currentRole, products, vendors, orders, deliveryPersons, users, isLoading, cart, favorites, toast,
-        login, signup, logout, switchRole,
+        login, signup, logout, resetPassword, updatePassword, switchRole,
         registerVendor, registerDeliveryPerson,
         refreshData: fetchData,
         addProduct, updateProduct, updateProductStatus, deleteProduct,
