@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context';
 import { Button, Input, Card, Badge, Avatar } from '../components/UI';
 import { CATEGORIES } from '../constants';
 import { OrderStatus, Product } from '../types';
 
-// Helper to read file as Base64
 const readFile = (file: File): Promise<string> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -19,10 +18,17 @@ export const VendorDashboard: React.FC = () => {
   const { products, orders, currentUser, vendors } = useApp();
   const navigate = useNavigate();
   
-  const currentVendor = vendors.find(v => v.userId === currentUser?.id);
+  const currentVendor = useMemo(() => vendors.find(v => v.userId === currentUser?.id), [vendors, currentUser]);
   const vendorId = currentVendor?.vendorId;
-  const pendingOrders = orders.filter(o => o.vendorId === vendorId && o.status !== 'delivered');
-  const totalSales = orders.filter(o => o.vendorId === vendorId).reduce((acc, curr) => acc + curr.total, 0);
+
+  // Optimized Calculations
+  const pendingOrders = useMemo(() => {
+      return orders.filter(o => o.vendorId === vendorId && o.status !== 'delivered');
+  }, [orders, vendorId]);
+
+  const totalSales = useMemo(() => {
+      return orders.filter(o => o.vendorId === vendorId).reduce((acc, curr) => acc + curr.total, 0);
+  }, [orders, vendorId]);
 
   return (
     <div className="p-4 min-h-screen bg-gray-50 pb-24 animate-fade-in pb-safe">
@@ -101,17 +107,28 @@ export const VendorProducts: React.FC = () => {
 export const VendorOrders: React.FC = () => {
     const { orders, updateOrderStatus, vendors, currentUser, refreshData } = useApp();
     const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
-
-    useEffect(() => { refreshData(); }, []);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const currentVendor = vendors.find(v => v.userId === currentUser?.id);
     const vendorId = currentVendor?.vendorId;
-    const myOrders = orders.filter(o => o.vendorId === vendorId);
+    
+    // Explicitly filter orders for this vendor
+    const myOrders = useMemo(() => orders.filter(o => o.vendorId === vendorId), [orders, vendorId]);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await refreshData();
+        setIsRefreshing(false);
+    };
+
+    useEffect(() => { 
+        handleRefresh(); 
+    }, []);
 
     const filteredOrders = myOrders.filter(o => {
         if (filter === 'all') return true;
-        if (filter === 'active') return !['delivered','declined','cancelled','picked_up','in_route'].includes(o.status);
-        if (filter === 'completed') return ['delivered','declined','cancelled','picked_up','in_route'].includes(o.status);
+        if (filter === 'active') return ['placed', 'received', 'preparing', 'ready_for_pickup', 'assigned'].includes(o.status);
+        if (filter === 'completed') return ['picked_up', 'in_route', 'delivered', 'declined', 'cancelled'].includes(o.status);
         return true;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -121,8 +138,8 @@ export const VendorOrders: React.FC = () => {
     };
 
     const getNextAction = (status: OrderStatus, deliveryOption: 'delivery' | 'pickup') => {
-        // Detailed Vendor Workflow
-        if (status === 'placed') return { label: 'Accept & Prepare', next: 'preparing' as OrderStatus, icon: 'fire-burner', btnVariant: 'primary' as const };
+        if (status === 'placed') return { label: 'Accept Order', next: 'received' as OrderStatus, icon: 'check', btnVariant: 'primary' as const };
+        if (status === 'received') return { label: 'Start Preparing', next: 'preparing' as OrderStatus, icon: 'fire-burner', btnVariant: 'primary' as const };
         if (status === 'preparing') {
              return deliveryOption === 'delivery' 
                 ? { label: 'Ready for Driver', next: 'ready_for_pickup' as OrderStatus, icon: 'box', btnVariant: 'primary' as const }
@@ -131,7 +148,7 @@ export const VendorOrders: React.FC = () => {
         if (status === 'ready_for_pickup' && deliveryOption === 'pickup') {
              return { label: 'Picked Up', next: 'delivered' as OrderStatus, icon: 'check', btnVariant: 'success' as const };
         }
-        return null; // For delivery, the driver takes over after 'ready_for_pickup'
+        return null;
     };
 
     return (
@@ -139,15 +156,28 @@ export const VendorOrders: React.FC = () => {
             <div className="mb-4 flex flex-col gap-2">
                 <div className="flex justify-between items-center">
                     <h1 className="text-xl font-bold text-gray-900">Orders Management</h1>
-                    <Button size="sm" variant="outline" onClick={refreshData} icon="rotate">Check Orders</Button>
+                    <Button size="sm" variant="outline" onClick={handleRefresh} icon={isRefreshing ? 'spinner' : 'rotate'}>
+                        {isRefreshing ? 'Checking...' : 'Check Orders'}
+                    </Button>
                 </div>
             </div>
 
             <div className="flex gap-2 mb-6">
-                {['active', 'completed'].map(f => (
+                {['active', 'completed', 'all'].map(f => (
                     <button key={f} onClick={() => setFilter(f as any)} className={`px-5 py-2 rounded-full text-xs font-bold capitalize ${filter === f ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}>{f}</button>
                 ))}
             </div>
+
+            {/* DEBUG INFO: Only shows if empty */}
+            {filteredOrders.length === 0 && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-yellow-800 font-mono">
+                    <p><strong>Debug Status:</strong></p>
+                    <p>Current Vendor ID: {vendorId || 'Not Found'}</p>
+                    <p>Total Orders in System: {orders.length}</p>
+                    <p>Orders matching this Vendor: {myOrders.length}</p>
+                    <p>Current Filter: {filter}</p>
+                </div>
+            )}
 
             <div className="space-y-4">
                 {filteredOrders.length === 0 ? <p className="text-center py-10 text-gray-400">No orders found.</p> : 
@@ -158,7 +188,7 @@ export const VendorOrders: React.FC = () => {
                                 <div className="flex justify-between items-start mb-4 border-b border-gray-50 pb-3">
                                     <div>
                                         <span className="font-bold text-gray-900">#{order.id.slice(-4)}</span>
-                                        <Badge color="blue" className="ml-2">{order.deliveryOption}</Badge>
+                                        <Badge color="blue">{order.deliveryOption}</Badge>
                                         <p className="text-xs text-gray-400 mt-1">{new Date(order.createdAt).toLocaleDateString()}</p>
                                     </div>
                                     <div className="text-right">
@@ -172,7 +202,7 @@ export const VendorOrders: React.FC = () => {
                                     ))}
                                 </div>
                                 <div className="flex justify-end gap-2">
-                                    {order.status === 'placed' && <Button size="sm" variant="danger" onClick={(e) => handleStatusChange(e, order.id, 'declined')}>Decline</Button>}
+                                    {['placed', 'received', 'preparing'].includes(order.status) && <Button size="sm" variant="danger" onClick={(e) => handleStatusChange(e, order.id, 'declined')}>Decline</Button>}
                                     {nextAction && <Button size="sm" variant={nextAction.btnVariant} onClick={(e) => handleStatusChange(e, order.id, nextAction.next)} icon={nextAction.icon}>{nextAction.label}</Button>}
                                     {order.status === 'ready_for_pickup' && order.deliveryOption === 'delivery' && <span className="text-xs text-gray-400 italic py-2">Waiting for driver...</span>}
                                 </div>
@@ -185,8 +215,7 @@ export const VendorOrders: React.FC = () => {
     );
 };
 
-// --- Product Forms ---
-
+// ... Rest of the file (ProductForm, AddProduct, EditProduct, VendorOnboarding) remains same but included for completeness in a real file replacement ...
 const ProductForm: React.FC<{
   initialData?: Partial<Product>;
   onSubmit: (data: any) => Promise<void>;
@@ -228,7 +257,6 @@ const ProductForm: React.FC<{
 
   const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      // Use custom category if 'Other' is selected
       const finalCategory = formData.category === 'OTHER' ? formData.customCategory : formData.category;
       
       onSubmit({
@@ -238,7 +266,6 @@ const ProductForm: React.FC<{
       });
   };
 
-  // Determine if we need to show custom input initially
   const isCustomCat = initialData?.category && !CATEGORIES.some(c => c.name === initialData.category);
   useEffect(() => {
       if (isCustomCat && initialData?.category) {
@@ -327,11 +354,8 @@ export const AddProduct: React.FC = () => {
         const success = await addProduct(data);
         setLoading(false);
         if (success) {
-            alert("Product submitted! It will be visible after admin approval.");
             navigate('/vendor/products');
-        } else {
-            alert("Failed to add product. Ensure you are a verified vendor.");
-        }
+        } 
     };
 
     return (

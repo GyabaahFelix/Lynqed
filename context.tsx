@@ -52,7 +52,7 @@ interface AppContextType {
   banUser: (userId: string, status: boolean) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   approveVendor: (vendorId: string, status: boolean) => Promise<void>;
-  approveDeliveryPerson: (id: string, userId: string, status: 'approved' | 'rejected') => Promise<void>;
+  approveDeliveryPerson: (id: string, userId: string, status: 'approved' | 'rejected' | 'suspended') => Promise<void>;
   
   // UI Actions
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -65,7 +65,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // Initialize Role from LocalStorage to persist state across refreshes
+  // Initialize Role from LocalStorage
   const [currentRole, setCurrentRole] = useState<Role>(() => {
       try {
         const saved = localStorage.getItem('lynqed_role');
@@ -103,7 +103,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem('lynqed_cart', JSON.stringify(cart)); }, [cart]);
   useEffect(() => { localStorage.setItem('lynqed_favs', JSON.stringify(favorites)); }, [favorites]);
   
-  // Persist Role Logic: Whenever currentRole changes, update localStorage
   useEffect(() => {
       if (currentRole !== 'guest') {
           localStorage.setItem('lynqed_role', currentRole);
@@ -112,14 +111,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- INITIAL LOAD ---
   useEffect(() => {
-    checkSession();
-    fetchData();
+    // We start init immediately
+    initApp();
     
     // Realtime subscriptions
     const productSub = supabase.channel('public:products').on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchData()).subscribe();
     const orderSub = supabase.channel('public:orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
           fetchData();
-          // Logic for notifications could go here
       }).subscribe();
 
     return () => {
@@ -127,6 +125,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.removeChannel(orderSub);
     };
   }, []);
+
+  const initApp = async () => {
+      // 1. Check Session First
+      await checkSession();
+      // 2. Fetch Data in background (Don't block UI if possible)
+      fetchData();
+  };
 
   const checkSession = async () => {
       try {
@@ -137,26 +142,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setCurrentUser(null);
               setCurrentRole('guest');
               localStorage.removeItem('lynqed_role');
-              setIsLoading(false);
           }
       } catch (e) {
+          console.error("Session check failed", e);
+      } finally {
+          // Crucial: Stop loading spinner regardless of data fetch status
           setIsLoading(false);
       }
   };
 
   const fetchUserProfile = async (userId: string): Promise<User | null> => {
       try {
+          const persistedRole = localStorage.getItem('lynqed_role') as Role;
+
           let { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
           
           if (data) {
-              // Check if banned
               if (data.isBanned) {
                   await supabase.auth.signOut();
                   localStorage.removeItem('lynqed_role');
                   alert("Your account has been suspended by an administrator.");
                   setCurrentUser(null);
                   setCurrentRole('guest');
-                  setIsLoading(false);
                   return null;
               }
 
@@ -170,69 +177,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               setCurrentUser(user);
               
-              // Role Verification Logic - ROBUST REFRESH FIX
-              // We read directly from localStorage here to ensure we get the persisted intent
-              // even if the React state variable 'currentRole' is stale in this closure.
-              const persistedRole = localStorage.getItem('lynqed_role') as Role;
               const isPersistedRoleValid = persistedRole && user.roles.includes(persistedRole);
 
               if (isPersistedRoleValid) {
-                  // Keep the persisted role (e.g., stay as Admin after refresh)
                   setCurrentRole(persistedRole);
               } else {
-                  // Fallback: Default Hierarchy if stored role is invalid or missing
                   if (user.roles.includes('admin')) setCurrentRole('admin');
                   else if (user.roles.includes('vendor')) setCurrentRole('vendor');
                   else if (user.roles.includes('deliveryPerson')) setCurrentRole('deliveryPerson');
                   else setCurrentRole('buyer');
               }
-              
-              setIsLoading(false);
               return user;
           }
       } catch (e) {
           console.error("Profile fetch error", e);
       }
-      setIsLoading(false);
       return null;
   };
 
   const fetchData = async () => {
       try {
-          // Wrap in try-catch blocks individually so one failure doesn't stop app
-          try {
-            const { data: pData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-            if (pData) setProducts(pData as Product[]);
-          } catch(e) {}
+          // Optimized: Parallel Data Fetching
+          const fetchSafely = async (table: string, orderBy?: string) => {
+             try {
+                let query = supabase.from(table).select('*');
+                if (orderBy) query = query.order(orderBy, { ascending: false });
+                const { data, error } = await query;
+                if (error) return null;
+                return data;
+             } catch (e) { return null; }
+          };
 
-          try {
-            const { data: vData } = await supabase.from('vendors').select('*');
-            if (vData) setVendors(vData as Vendor[]);
-          } catch(e) {}
+          const [pData, vData, oData, dData] = await Promise.all([
+              fetchSafely('products', 'created_at'),
+              fetchSafely('vendors'),
+              fetchSafely('orders', 'created_at'),
+              fetchSafely('delivery_persons')
+          ]);
 
-          try {
-            const { data: oData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-            if (oData) {
-                const mapped = oData.map((o: any) => ({
-                    ...o,
-                    items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
-                }));
-                setOrders(mapped as Order[]);
-            }
-          } catch(e) {}
+          if (pData) setProducts(pData as Product[]);
+          if (vData) setVendors(vData as Vendor[]);
+          
+          if (oData) {
+              const mapped = oData.map((o: any) => ({
+                  ...o,
+                  items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
+              }));
+              setOrders(mapped as Order[]);
+          }
 
-          try {
-            const { data: dData } = await supabase.from('delivery_persons').select('*');
-            if (dData) setDeliveryPersons(dData as DeliveryPerson[]);
-          } catch(e) { /* Table might not exist yet */ }
+          if (dData) setDeliveryPersons(dData as DeliveryPerson[]);
 
-          // Admin only data - check if user IS admin based on current roles in ref or local
-          // We use a loose check here to try and fetch if they might be admin
+          // Admin only data - Lazy load
           if (localStorage.getItem('lynqed_role') === 'admin') {
-              try {
-                const { data: uData } = await supabase.from('profiles').select('*');
-                if (uData) setUsers(uData as any);
-              } catch(e) {}
+              const uData = await fetchSafely('profiles');
+              if (uData) setUsers(uData as any);
           }
 
       } catch (e) {
@@ -247,15 +246,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       if (data.user) {
           const user = await fetchUserProfile(data.user.id);
-          // Refresh data to ensure user sees latest
-          await fetchData();
+          // Force fresh fetch on login
+          fetchData();
           
           if (user) {
-              // Intelligent Role Assignment on Login
-              // If the user was previously logged in with a specific role, we might want to respect that?
-              // Or default to their "highest" role.
-              // Let's default to highest role to make it easy.
-              
               let targetRole: Role = 'buyer';
               if (user.roles.includes('admin')) targetRole = 'admin';
               else if (user.roles.includes('vendor')) targetRole = 'vendor';
@@ -274,10 +268,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           options: { data: { full_name: fullName, roles: [role] } }
       });
       if (error?.message?.includes("already registered")) {
-          // Self-healing: try to login if they exist but profile might be missing
            const loginRes = await supabase.auth.signInWithPassword({ email, password });
            if (loginRes.data.user) {
-               // Check if profile exists, if not create it
+               // Self-heal profile if missing
                const { data: p } = await supabase.from('profiles').select('id').eq('id', loginRes.data.user.id).single();
                if (!p) {
                    await supabase.from('profiles').insert({
@@ -304,7 +297,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = async () => {
       await supabase.auth.signOut();
-      localStorage.removeItem('lynqed_role'); // Clear persisted role
+      localStorage.removeItem('lynqed_role'); 
       setCurrentUser(null);
       setCurrentRole('guest');
       setCart([]);
@@ -377,20 +370,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- Product/Cart Logic ---
   const addProduct = async (prod: any) => {
-      if (!currentUser) return false;
-      const v = vendors.find(vn => vn.userId === currentUser.id);
-      if (!v) return false;
-      const { error } = await supabase.from('products').insert({
-          ...prod, vendorId: v.vendorId, status: 'pending'
-      });
-      if (!error) { showToast("Product submitted for approval", "success"); fetchData(); return true; }
-      return false;
+      if (!currentUser) {
+          alert("Session expired. Please log in again.");
+          return false;
+      }
+
+      try {
+          // 1. Force Fetch Vendor ID to ensure accuracy
+          const { data: vData, error: vError } = await supabase
+              .from('vendors')
+              .select('vendorId')
+              .eq('userId', currentUser.id)
+              .single();
+
+          if (vError || !vData) {
+              console.error("Vendor lookup failed:", vError);
+              alert("Error: Could not identify your vendor profile. Ensure you have registered as a vendor.");
+              return false;
+          }
+
+          // Sanitize: Remove UI-only fields
+          const { customCategory, ...dbProduct } = prod;
+
+          // 2. Insert
+          const { error } = await supabase.from('products').insert({
+              ...dbProduct, 
+              vendorId: vData.vendorId, 
+              status: 'pending'
+          });
+
+          if (error) {
+              console.error("Product insert error:", error);
+              alert(`Database Error: ${error.message} (Code: ${error.code})`);
+              return false;
+          }
+          
+          showToast("Product submitted for approval", "success"); 
+          fetchData(); 
+          return true;
+      } catch (e: any) {
+          alert(`Unexpected Error: ${e.message}`);
+          return false;
+      }
   };
   
   const updateProduct = async (id: string, data: any) => {
-      await supabase.from('products').update(data).eq('id', id);
-      showToast("Product updated", "success");
-      fetchData();
+      const { customCategory, ...dbData } = data;
+      const { error } = await supabase.from('products').update(dbData).eq('id', id);
+      if (error) {
+        showToast(`Update failed: ${error.message}`, "error");
+      } else {
+        showToast("Product updated", "success");
+        fetchData();
+      }
   };
   
   const deleteProduct = async (id: string) => {
@@ -423,11 +455,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearCart = () => setCart([]);
   
   const toggleFavorite = (pid: string) => {
-      setFavorites(prev => prev.includes(pid) ? prev.filter(i => i !== pid) : [...prev, pid]);
+      const isFav = favorites.includes(pid);
+      setFavorites(prev => isFav ? prev.filter(i => i !== pid) : [...prev, pid]);
+      showToast(isFav ? "Removed from Wishlist" : "Added to Wishlist", "info");
   };
 
   const placeOrder = async (option: 'delivery' | 'pickup', fee = 0) => {
       if (cart.length === 0) return;
+      
+      const session = await supabase.auth.getSession();
+      const currentUserId = currentUser ? currentUser.id : session.data.session?.user?.id;
+      
+      if (!currentUserId) {
+          alert("Please login to place an order");
+          return;
+      }
+
       const byVendor: Record<string, CartItem[]> = {};
       cart.forEach(i => {
           if (!byVendor[i.product.vendorId]) byVendor[i.product.vendorId] = [];
@@ -438,16 +481,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const items = byVendor[vid];
           const subtotal = items.reduce((s, i) => s + (i.product.price * i.quantity), 0);
           
-          await supabase.from('orders').insert({
-              buyerId: currentUser ? currentUser.id : (await supabase.auth.getSession()).data.session?.user?.id, // Ensure we have ID, or logic for guest
+          const { error } = await supabase.from('orders').insert({
+              buyerId: currentUserId, 
               vendorId: vid,
-              items,
+              items: items, // Supabase client auto-stringifies JSONB
               total: subtotal + fee,
               deliveryFee: fee,
               status: 'placed',
               deliveryOption: option
           });
+
+          if (error) {
+              console.error("Order placement failed:", error);
+              alert(`Order failed: ${error.message}`);
+              return;
+          }
           
+          // Stock reduction
           for (const item of items) {
               const newStock = Math.max(0, item.product.stock - item.quantity);
               await supabase.from('products').update({stock: newStock}).eq('id', item.productId);
@@ -455,7 +505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       showToast("Order Placed Successfully!", "success");
       clearCart();
-      fetchData();
+      fetchData(); // Force refresh to show new orders immediately
   };
 
   const updateOrderStatus = async (oid: string, status: OrderStatus) => {

@@ -15,8 +15,6 @@ export const StorePage: React.FC = () => {
 
     if (!vendor) return <div className="p-8 text-center text-gray-500">Store not found</div>;
 
-    const initials = vendor.storeName.substring(0, 2).toUpperCase();
-
     return (
         <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in">
             {/* Store Header */}
@@ -72,11 +70,11 @@ export const StorePage: React.FC = () => {
                                     className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 hover:shadow-xl transition-all duration-300 group relative flex flex-col h-full cursor-pointer"
                                     onClick={() => navigate(`/buyer/product/${product.id}`)}
                                 >
-                                    <div className="aspect-square w-full relative overflow-hidden">
+                                    <div className="aspect-square w-full relative overflow-hidden bg-gray-50">
                                         <img 
                                             src={product.images[0]} 
                                             alt={product.title} 
-                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                                            className="w-full h-full object-contain p-2 transition-transform duration-700 group-hover:scale-110" 
                                         />
                                         <button 
                                             className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-red-100 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90"
@@ -123,25 +121,24 @@ export const StorePage: React.FC = () => {
 export const ProductDetail: React.FC = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { products, addToCart, cart, removeFromCart, updateCartQuantity, vendors } = useApp();
+    const { products, addToCart, cart, removeFromCart, updateCartQuantity, vendors, favorites, toggleFavorite } = useApp();
     
     const product = products.find(p => p.id === id);
     const vendor = vendors.find(v => v.vendorId === product?.vendorId);
     
-    // Local state for quantity selector logic when item NOT in cart
     const [preAddQuantity, setPreAddQuantity] = useState(1);
     
     if (!product) return <div className="p-8 text-center text-gray-500">Product not found</div>;
 
     const cartItem = cart.find(i => i.productId === product.id);
     const isInCart = !!cartItem;
+    const isFav = favorites.includes(product.id);
     
-    // If in cart, use cart quantity. If not, use local pre-add quantity.
     const currentQuantity = cartItem ? cartItem.quantity : preAddQuantity;
 
     const handleQuantityChange = (delta: number) => {
         const newQty = Math.max(1, currentQuantity + delta);
-        if (newQty > product.stock) return; // Cap at stock
+        if (newQty > product.stock) return;
 
         if (isInCart) {
             updateCartQuantity(product.id, newQty);
@@ -159,25 +156,43 @@ export const ProductDetail: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-white pb-24 animate-fade-in relative">
-             {/* Full Screen Image */}
-             <div className="relative h-[50vh] bg-gray-100">
+        <div className="min-h-screen bg-gray-50 pb-24 animate-fade-in relative flex flex-col">
+             {/* Header Navigation (Absolute) */}
+             <div className="absolute top-0 left-0 right-0 p-4 z-20 flex justify-between items-center">
                 <button 
                     onClick={() => navigate(-1)} 
-                    className="absolute top-4 left-4 z-10 w-10 h-10 bg-white/50 backdrop-blur-md rounded-full flex items-center justify-center text-gray-800 hover:bg-white transition-all"
+                    className="w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center text-gray-800 hover:bg-white shadow-sm transition-all"
                 >
                     <i className="fa-solid fa-arrow-left"></i>
                 </button>
-                <img src={product.images[0]} className="w-full h-full object-cover" alt={product.title} />
+                <button 
+                    onClick={() => toggleFavorite(product.id)} 
+                    className={`w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-all ${isFav ? 'text-red-500' : 'text-gray-400'}`}
+                >
+                    <i className={`${isFav ? 'fa-solid' : 'fa-regular'} fa-heart`}></i>
+                </button>
+             </div>
+
+             {/* Full Screen Image Container - IMPROVED VISIBILITY */}
+             <div className="relative h-[45vh] w-full bg-gray-100 overflow-hidden flex items-center justify-center">
+                <div 
+                    className="absolute inset-0 bg-cover bg-center blur-xl opacity-50 scale-110"
+                    style={{ backgroundImage: `url(${product.images[0]})` }}
+                ></div>
+                <img 
+                    src={product.images[0]} 
+                    className="relative z-10 max-h-full max-w-full object-contain shadow-lg" 
+                    alt={product.title} 
+                />
              </div>
 
              {/* Content Sheet */}
-             <div className="relative -mt-6 bg-white rounded-t-[2rem] p-6 min-h-[50vh] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
+             <div className="relative -mt-6 bg-white rounded-t-[2rem] p-6 flex-grow shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-10">
                 <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
                 
                 <div className="flex justify-between items-start mb-4">
                     <div>
-                        <h1 className="text-2xl font-display font-bold text-gray-900 leading-tight mb-2">{product.title}</h1>
+                        <h1 className="text-xl font-display font-bold text-gray-900 leading-tight mb-2">{product.title}</h1>
                         <div className="flex items-center gap-2" onClick={() => navigate(`/store/${vendor?.vendorId}`)}>
                             <Avatar src={vendor?.storeAvatarUrl} name={vendor?.storeName || 'Vendor'} size="sm" />
                             <span className="text-sm font-medium text-gray-600 underline decoration-gray-300 underline-offset-2">{vendor?.storeName}</span>
@@ -185,17 +200,18 @@ export const ProductDetail: React.FC = () => {
                     </div>
                     <div className="text-right">
                         <span className="block text-2xl font-extrabold text-primary">{product.currency}{product.price.toFixed(2)}</span>
-                        <span className="text-xs font-bold text-green-500 bg-green-50 px-2 py-0.5 rounded-full">{product.stock > 0 ? 'In Stock' : 'Sold Out'}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${product.stock > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                            {product.stock > 0 ? `${product.stock} In Stock` : 'Sold Out'}
+                        </span>
                     </div>
                 </div>
 
-                {/* WhatsApp Action */}
                 {vendor?.contactPhone && (
                      <a 
                         href={`https://wa.me/${vendor.contactPhone.replace(/[^0-9]/g, '').replace(/^0/, '233')}?text=Hi, I'm interested in ${product.title}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 bg-green-50 p-3 rounded-xl mb-6 hover:bg-green-100 transition-colors cursor-pointer"
+                        className="flex items-center gap-3 bg-green-50 p-3 rounded-xl mb-6 hover:bg-green-100 transition-colors cursor-pointer border border-green-100"
                     >
                         <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200">
                             <i className="fa-brands fa-whatsapp text-xl"></i>
@@ -212,9 +228,7 @@ export const ProductDetail: React.FC = () => {
                 <p className="text-gray-600 leading-relaxed text-sm mb-8">{product.description}</p>
              </div>
 
-             {/* Sticky Bottom Bar */}
-             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 flex items-center gap-4 z-30 pb-safe">
-                {/* Quantity Selector */}
+             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 flex items-center gap-4 z-30 pb-safe shadow-[0_-5px_20px_rgba(0,0,0,0.03)]">
                 <div className="flex items-center bg-gray-100 rounded-2xl p-1">
                     <button 
                         onClick={() => handleQuantityChange(-1)}
@@ -233,14 +247,13 @@ export const ProductDetail: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Add/Remove Button */}
                 <Button 
                     fullWidth 
                     size="lg" 
                     variant={isInCart ? 'danger' : 'primary'}
                     onClick={handleAction}
                     disabled={product.stock === 0}
-                    className={isInCart ? 'shadow-red-200' : ''}
+                    className={isInCart ? 'shadow-red-200' : 'shadow-primary/30'}
                 >
                     {isInCart ? (
                         <>
@@ -305,7 +318,6 @@ export const Cart: React.FC = () => {
                     ))
                 )}
 
-                {/* Summary Section - Integrated into flow */}
                 {cart.length > 0 && (
                     <div className="mt-6 pt-4 border-t border-gray-200">
                         <div className="flex justify-between items-center mb-2">
@@ -325,32 +337,57 @@ export const Cart: React.FC = () => {
 };
 
 export const Checkout: React.FC = () => {
-    const { cart, placeOrder, currentUser, login } = useApp();
+    const { cart, placeOrder, currentUser, signup, login } = useApp();
     const navigate = useNavigate();
     const [method, setMethod] = useState<'delivery' | 'pickup'>('delivery');
     const [isPlacing, setIsPlacing] = useState(false);
     const [guestEmail, setGuestEmail] = useState('');
-    const [deliveryFee, setDeliveryFee] = useState(10); // Default base fee
+    const [deliveryFee, setDeliveryFee] = useState(10); 
 
-    // Simple fee calculation simulation
     useEffect(() => {
         if (method === 'pickup') {
             setDeliveryFee(0);
         } else {
-            // In a real app, we'd calculate distance between User GPS and Vendor GPS
-            // For MVP, we use a random distance factor or flat rate
             setDeliveryFee(15.00); 
         }
     }, [method]);
 
     const handleOrder = async () => {
-        if (!currentUser && !guestEmail) { alert("Email required"); return; }
-        if (!currentUser) await login(guestEmail, 'guest');
+        if (!currentUser && !guestEmail) { alert("Email required for guest checkout"); return; }
         
         setIsPlacing(true);
-        // Pass the calculated fee to placeOrder
-        await placeOrder(method, deliveryFee);
-        setTimeout(() => { setIsPlacing(false); navigate('/buyer/orders'); }, 2000);
+
+        try {
+            // Handle Guest: Create Shadow Account
+            if (!currentUser) {
+                // Try to create shadow account
+                const shadowPass = 'guest123'; 
+                const regRes = await signup(guestEmail, shadowPass, 'Guest User', 'buyer');
+                
+                if (!regRes.success) {
+                    // If exists, try to log in (assuming they are a returning guest who knows this implicit flow or we just grab the ID if we could, but we can't easily without password. 
+                    // So we prompt them to login if registration fails due to exists.)
+                     const loginRes = await login(guestEmail, shadowPass);
+                     if (!loginRes.success) {
+                         alert("This email is already registered. Please Login first.");
+                         setIsPlacing(false);
+                         return;
+                     }
+                }
+            }
+
+            // Place Order
+            await placeOrder(method, deliveryFee);
+            setTimeout(() => { 
+                setIsPlacing(false); 
+                navigate('/buyer/orders'); 
+            }, 2000);
+
+        } catch (e) {
+            console.error(e);
+            setIsPlacing(false);
+            alert("Checkout failed. Please try again.");
+        }
     };
 
     const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -362,7 +399,9 @@ export const Checkout: React.FC = () => {
             
             {!currentUser && (
                 <Card className="p-4 mb-4">
-                    <Input label="Guest Email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)} />
+                    <h3 className="font-bold text-sm mb-2">Guest Checkout</h3>
+                    <Input label="Email Address" value={guestEmail} onChange={e => setGuestEmail(e.target.value)} placeholder="Enter email for receipt" />
+                    <p className="text-xs text-gray-400 mt-2">We'll create a temporary account for you to track this order.</p>
                 </Card>
             )}
 
@@ -390,7 +429,7 @@ export const Checkout: React.FC = () => {
 
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100">
                 <Button fullWidth size="lg" onClick={handleOrder} disabled={isPlacing}>
-                    {isPlacing ? 'Processing...' : `Pay ₵${total.toFixed(2)}`}
+                    {isPlacing ? 'Processing Order...' : `Pay ₵${total.toFixed(2)}`}
                 </Button>
             </div>
         </div>

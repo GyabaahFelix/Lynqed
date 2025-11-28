@@ -6,9 +6,16 @@ import { Button, Card, Badge } from '../components/UI';
 export const DeliveryDashboard: React.FC = () => {
     const { orders, currentUser, assignDelivery, updateOrderStatus, refreshData, deliveryPersons } = useApp();
     const [activeTab, setActiveTab] = useState<'available' | 'active' | 'history'>('available');
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Get current rider profile
     const me = deliveryPersons.find(d => d.userId === currentUser?.id);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await refreshData();
+        setIsRefreshing(false);
+    };
     
     // 1. Check for Pending
     if (!me || me.status === 'pending') return (
@@ -17,6 +24,7 @@ export const DeliveryDashboard: React.FC = () => {
                 <i className="fa-solid fa-clock text-4xl text-yellow-500 mb-4"></i>
                 <h2 className="text-xl font-bold text-gray-900">Account Pending</h2>
                 <p className="text-gray-500 mt-2">Your delivery application is under review by admin.</p>
+                <Button variant="ghost" className="mt-4" onClick={handleRefresh}>Check Status</Button>
             </div>
         </div>
     );
@@ -76,9 +84,19 @@ export const DeliveryDashboard: React.FC = () => {
             <div className="bg-blue-600 p-6 text-white rounded-b-3xl shadow-lg mb-6 sticky top-0 z-10">
                 <div className="flex justify-between items-center mb-4">
                     <h1 className="text-2xl font-display font-bold">Delivery Hub</h1>
-                    <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                        <span className="text-xs font-bold uppercase tracking-wider">Online</span>
+                    <div className="flex items-center gap-3">
+                        <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-white hover:bg-blue-700 bg-blue-500/20" 
+                            onClick={handleRefresh}
+                        >
+                            <i className={`fa-solid fa-rotate ${isRefreshing ? 'animate-spin' : ''}`}></i>
+                        </Button>
+                        <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                            <span className="text-xs font-bold uppercase tracking-wider">Online</span>
+                        </div>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -108,7 +126,7 @@ export const DeliveryDashboard: React.FC = () => {
                             <div className="text-center py-10 text-gray-400">
                                 <i className="fa-solid fa-map-location-dot text-4xl mb-4 opacity-20"></i>
                                 <p>No orders ready for pickup.</p>
-                                <Button size="sm" variant="ghost" onClick={refreshData} className="mt-4">Refresh</Button>
+                                <Button size="sm" variant="ghost" onClick={handleRefresh} className="mt-4">Refresh Jobs</Button>
                             </div>
                         ) : (
                             availableJobs.map(job => (
