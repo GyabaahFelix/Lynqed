@@ -15,6 +15,7 @@ interface AppContextType {
   deliveryPersons: DeliveryPerson[];
   users: User[]; // For Admin
   isLoading: boolean;
+  isDataLoading: boolean; // New state for data fetching
   favorites: string[];
   toast: ToastMessage | null;
   
@@ -76,7 +77,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
   });
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Auth loading
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(true); // Content loading
   const [toast, setToast] = useState<ToastMessage | null>(null);
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -237,6 +239,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       } catch (e) {
           console.error("Data fetch error", e);
+      } finally {
+          setIsDataLoading(false);
       }
   };
 
@@ -307,7 +311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetPassword = async (email: string) => {
       try {
           const { error } = await supabase.auth.resetPasswordForEmail(email, {
-              redirectTo: window.location.origin + '/login',
+              redirectTo: window.location.origin, // Redirect to app root, App.tsx handles navigation
           });
           if (error) return { success: false, error: error.message };
           return { success: true };
@@ -564,7 +568,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-        currentUser, currentRole, products, vendors, orders, deliveryPersons, users, isLoading, cart, favorites, toast,
+        currentUser, currentRole, products, vendors, orders, deliveryPersons, users, isLoading, isDataLoading, cart, favorites, toast,
         login, signup, logout, resetPassword, updatePassword, switchRole,
         registerVendor, registerDeliveryPerson,
         refreshData: fetchData,

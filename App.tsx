@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context';
 import { Layout } from './components/Layout';
 import { Welcome, BuyerDashboard } from './pages/Home';
@@ -9,8 +9,9 @@ import { ProductDetail, Cart, Checkout, StorePage } from './pages/Product';
 import { VendorDashboard, VendorProducts, AddProduct, EditProduct, VendorOrders, VendorOnboarding } from './pages/Vendor';
 import { AdminDashboard } from './pages/Admin';
 import { UserProfile, OrdersPage, WishlistPage } from './pages/Profile';
-import { Login, Register, AdminLogin } from './pages/Auth';
+import { Login, Register, AdminLogin, ForgotPassword, UpdatePassword } from './pages/Auth';
 import { DeliveryDashboard } from './pages/Delivery';
+import { supabase } from './supabaseClient';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
     const { currentUser, currentRole, isLoading } = useApp();
@@ -22,14 +23,35 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: string }> = (
     return <>{children}</>;
 };
 
+// Component to handle global auth events like password recovery
+const AuthEventHandler = () => {
+    const navigate = useNavigate();
+    
+    useEffect(() => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                navigate('/update-password');
+            }
+        });
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+    }, [navigate]);
+
+    return null;
+}
+
 const AppContent = () => {
   return (
     <Layout>
+      <AuthEventHandler />
       <Routes>
         {/* Public / Entry */}
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/update-password" element={<UpdatePassword />} />
         
         {/* Public Store Page */}
         <Route path="/store/:vendorId" element={<StorePage />} />

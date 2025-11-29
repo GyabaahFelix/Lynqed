@@ -1,31 +1,17 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { useApp } from '../context';
 import { Button, Input } from '../components/UI';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Role } from '../types';
-import { supabase } from '../supabaseClient';
 
 export const Login: React.FC = () => {
-    const { login, resetPassword, updatePassword, showToast } = useApp();
+    const { login } = useApp();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [isResetting, setIsResetting] = useState(false);
-    const [isUpdateMode, setIsUpdateMode] = useState(false);
-
-    // Detect if user is here from a password recovery link
-    useEffect(() => {
-        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === "PASSWORD_RECOVERY") {
-                setIsUpdateMode(true);
-            }
-        });
-        return () => {
-            authListener.subscription.unsubscribe();
-        };
-    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,72 +22,27 @@ export const Login: React.FC = () => {
         
         setIsLoading(false);
         if (result.success) {
-            // Intelligent Routing based on Role
-            if (result.role === 'admin') {
-                navigate('/admin/dashboard');
-            } else if (result.role === 'vendor') {
-                navigate('/vendor/dashboard');
-            } else if (result.role === 'deliveryPerson') {
-                navigate('/delivery/dashboard');
-            } else {
-                navigate('/buyer/dashboard');
-            }
+            if (result.role === 'admin') navigate('/admin/dashboard');
+            else if (result.role === 'vendor') navigate('/vendor/dashboard');
+            else if (result.role === 'deliveryPerson') navigate('/delivery/dashboard');
+            else navigate('/buyer/dashboard');
         } else {
             setError(result.error || 'Login failed');
         }
     };
 
-    const handleResetPassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
-
-        const result = await resetPassword(email);
-        setIsLoading(false);
-
-        if (result.success) {
-            showToast("Password reset email sent!", "success");
-            setIsResetting(false); // Switch back to login view
-        } else {
-            setError(result.error || 'Failed to send reset email.');
-        }
-    };
-
-    const handleUpdatePassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
-
-        const result = await updatePassword(password);
-        setIsLoading(false);
-
-        if (result.success) {
-            showToast("Password updated successfully!", "success");
-            setIsUpdateMode(false);
-            navigate('/buyer/dashboard');
-        } else {
-            setError(result.error || 'Failed to update password.');
-        }
-    };
-
     return (
         <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
-            {/* Decorations */}
             <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-primary/10 rounded-full blur-3xl"></div>
             <div className="absolute bottom-[-10%] left-[-10%] w-80 h-80 bg-secondary/10 rounded-full blur-3xl"></div>
 
             <div className="flex-1 flex flex-col justify-center px-8 py-12 relative z-10 max-w-md mx-auto w-full animate-fade-in">
-                
                 <div className="mb-8 text-center">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-secondary text-white text-2xl shadow-glow mb-4">
                          <i className="fa-solid fa-bolt"></i>
                     </div>
-                    <h1 className="text-3xl font-display font-extrabold text-gray-900">
-                        {isUpdateMode ? 'Set New Password' : isResetting ? 'Reset Password' : 'Welcome Back'}
-                    </h1>
-                    <p className="text-gray-500 mt-2">
-                        {isUpdateMode ? 'Create a secure password' : isResetting ? 'Enter your email to receive instructions' : 'Sign in to continue to LYNQED'}
-                    </p>
+                    <h1 className="text-3xl font-display font-extrabold text-gray-900">Welcome Back</h1>
+                    <p className="text-gray-500 mt-2">Sign in to continue to LYNQED</p>
                 </div>
 
                 {error && (
@@ -111,108 +52,180 @@ export const Login: React.FC = () => {
                     </div>
                 )}
 
-                {isUpdateMode ? (
-                    <form onSubmit={handleUpdatePassword} className="space-y-6">
+                <form onSubmit={handleLogin} className="space-y-6">
+                    <Input 
+                        label="Email Address" 
+                        icon="envelope" 
+                        type="email"
+                        placeholder="you@university.edu" 
+                        value={email} 
+                        onChange={e => setEmail(e.target.value)} 
+                        required
+                    />
+                    
+                    <div>
                         <Input 
-                            label="New Password" 
+                            label="Password" 
                             icon="lock" 
                             type="password"
-                            placeholder="New secure password" 
+                            placeholder="••••••••" 
                             value={password}
-                            onChange={e => setPassword(e.target.value)} 
-                            required
-                            minLength={6}
-                        />
-                         <Button 
-                            fullWidth 
-                            size="lg" 
-                            type="submit"
-                            disabled={isLoading}
-                            className="shadow-xl shadow-primary/30"
-                        >
-                            {isLoading ? 'Updating...' : 'Update Password'}
-                        </Button>
-                    </form>
-                ) : isResetting ? (
-                    <form onSubmit={handleResetPassword} className="space-y-6">
-                        <Input 
-                            label="Email Address" 
-                            icon="envelope" 
-                            type="email"
-                            placeholder="you@university.edu" 
-                            value={email} 
-                            onChange={e => setEmail(e.target.value)} 
+                            onChange={e => setPassword(e.target.value)}
                             required
                         />
-                         <Button 
-                            fullWidth 
-                            size="lg" 
-                            type="submit"
-                            disabled={isLoading}
-                            className="shadow-xl shadow-primary/30"
-                        >
-                            {isLoading ? 'Sending Link...' : 'Send Reset Link'}
-                        </Button>
-                        <div className="text-center mt-4">
-                            <button 
-                                type="button" 
-                                onClick={() => { setIsResetting(false); setError(''); }} 
-                                className="text-sm text-gray-500 hover:text-gray-900 font-medium"
+                        <div className="flex justify-end -mt-3 mb-2">
+                            <Link 
+                                to="/forgot-password"
+                                className="text-xs font-bold text-primary hover:text-primaryDark transition-colors"
                             >
-                                Back to Login
-                            </button>
+                                Forgot Password?
+                            </Link>
                         </div>
-                    </form>
-                ) : (
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <Input 
-                            label="Email Address" 
-                            icon="envelope" 
-                            type="email"
-                            placeholder="you@university.edu" 
-                            value={email} 
-                            onChange={e => setEmail(e.target.value)} 
-                            required
-                        />
-                        
-                        <div>
-                            <Input 
-                                label="Password" 
-                                icon="lock" 
-                                type="password"
-                                placeholder="••••••••" 
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                required
-                            />
-                            <div className="flex justify-end -mt-3 mb-2">
-                                <button 
-                                    type="button"
-                                    onClick={() => { setIsResetting(true); setError(''); }}
-                                    className="text-xs font-bold text-primary hover:text-primaryDark transition-colors"
-                                >
-                                    Forgot Password?
-                                </button>
-                            </div>
-                        </div>
+                    </div>
 
-                        <Button 
-                            fullWidth 
-                            size="lg" 
-                            type="submit"
-                            disabled={isLoading}
-                            className="shadow-xl shadow-primary/30"
-                        >
-                            {isLoading ? 'Signing in...' : 'Sign In'}
-                        </Button>
-                    </form>
-                )}
+                    <Button 
+                        fullWidth 
+                        size="lg" 
+                        type="submit"
+                        disabled={isLoading}
+                        className="shadow-xl shadow-primary/30"
+                    >
+                        {isLoading ? 'Signing in...' : 'Sign In'}
+                    </Button>
+                </form>
 
-                {!isResetting && !isUpdateMode && (
-                    <div className="mt-8 text-center text-sm text-gray-500">
-                        Don't have an account? <Link to="/register" className="font-bold text-primary hover:text-primaryDark transition-colors">Create Account</Link>
+                <div className="mt-8 text-center text-sm text-gray-500">
+                    Don't have an account? <Link to="/register" className="font-bold text-primary hover:text-primaryDark transition-colors">Create Account</Link>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const ForgotPassword: React.FC = () => {
+    const { resetPassword, showToast } = useApp();
+    const navigate = useNavigate();
+    const [email, setEmail] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+
+        const result = await resetPassword(email);
+        setIsLoading(false);
+
+        if (result.success) {
+            showToast("Reset link sent! Check your email.", "success");
+            navigate('/login');
+        } else {
+            setError(result.error || 'Failed to send reset email.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
+            <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-primary/10 rounded-full blur-3xl"></div>
+            <div className="flex-1 flex flex-col justify-center px-8 py-12 relative z-10 max-w-md mx-auto w-full animate-slide-up">
+                <div className="mb-6 text-center">
+                    <h1 className="text-2xl font-display font-extrabold text-gray-900">Reset Password</h1>
+                    <p className="text-gray-500 mt-2 text-sm">Enter your email to receive reset instructions</p>
+                </div>
+
+                {error && (
+                    <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-xl mb-4">
+                        {error}
                     </div>
                 )}
+
+                <form onSubmit={handleReset} className="space-y-6">
+                    <Input 
+                        label="Email Address" 
+                        icon="envelope" 
+                        type="email"
+                        placeholder="you@university.edu" 
+                        value={email} 
+                        onChange={e => setEmail(e.target.value)} 
+                        required
+                    />
+                    <Button 
+                        fullWidth 
+                        size="lg" 
+                        type="submit"
+                        disabled={isLoading}
+                    >
+                        {isLoading ? 'Sending...' : 'Send Reset Link'}
+                    </Button>
+                </form>
+
+                <div className="mt-6 text-center">
+                    <Link to="/login" className="text-sm font-bold text-gray-500 hover:text-gray-900">Back to Login</Link>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const UpdatePassword: React.FC = () => {
+    const { updatePassword, showToast } = useApp();
+    const navigate = useNavigate();
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+
+        const result = await updatePassword(password);
+        setIsLoading(false);
+
+        if (result.success) {
+            showToast("Password updated successfully!", "success");
+            navigate('/login');
+        } else {
+            setError(result.error || 'Failed to update password.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
+            <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-secondary/10 rounded-full blur-3xl"></div>
+            <div className="flex-1 flex flex-col justify-center px-8 py-12 relative z-10 max-w-md mx-auto w-full animate-slide-up">
+                <div className="mb-6 text-center">
+                    <h1 className="text-2xl font-display font-extrabold text-gray-900">Set New Password</h1>
+                    <p className="text-gray-500 mt-2 text-sm">Create a strong, secure password</p>
+                </div>
+
+                {error && (
+                    <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-xl mb-4">
+                        {error}
+                    </div>
+                )}
+
+                <form onSubmit={handleUpdate} className="space-y-6">
+                    <Input 
+                        label="New Password" 
+                        icon="lock" 
+                        type="password"
+                        placeholder="New secure password" 
+                        value={password}
+                        onChange={e => setPassword(e.target.value)} 
+                        required
+                        minLength={6}
+                    />
+                    <Button 
+                        fullWidth 
+                        size="lg" 
+                        type="submit"
+                        disabled={isLoading}
+                    >
+                        {isLoading ? 'Updating...' : 'Update Password'}
+                    </Button>
+                </form>
             </div>
         </div>
     );
@@ -282,7 +295,7 @@ export const Register: React.FC = () => {
                     <Input 
                         label="Email Address" 
                         icon="envelope" 
-                        type="email"
+                        type="email" 
                         placeholder="you@university.edu" 
                         value={email} 
                         onChange={e => setEmail(e.target.value)} 

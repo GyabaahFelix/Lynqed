@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
 import { CATEGORIES, INITIAL_LOCATION_CACHE } from '../constants';
-import { Button, Input, Card, Badge } from '../components/UI';
+import { Button, Input, Card, Badge, ProductCardSkeleton } from '../components/UI';
 
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
@@ -79,7 +79,7 @@ export const Welcome: React.FC = () => {
 };
 
 export const BuyerDashboard: React.FC = () => {
-  const { products, vendors, favorites, toggleFavorite, currentUser, addToCart, removeFromCart, cart, showToast } = useApp();
+  const { products, vendors, favorites, toggleFavorite, currentUser, addToCart, removeFromCart, cart, showToast, isDataLoading } = useApp();
   const navigate = useNavigate();
   const [selectedCat, setSelectedCat] = useState('All');
   const [sortType, setSortType] = useState<'nearby' | 'price' | 'rating'>('nearby');
@@ -135,47 +135,51 @@ export const BuyerDashboard: React.FC = () => {
   };
 
   // 1. Compute Dynamic Categories
-  const standardNames = new Set(CATEGORIES.map(c => c.name));
-  const customCategories = Array.from(new Set(products.map(p => p.category)))
-    .filter(cat => cat && !standardNames.has(cat) && cat !== 'OTHER')
-    .map(cat => {
-        const sampleProduct = products.find(p => p.category === cat);
-        return {
-            id: `cat-custom-${cat.replace(/\s+/g, '-').toLowerCase()}`,
-            name: cat,
-            icon: 'tag',
-            image: sampleProduct?.images[0] || 'https://via.placeholder.com/150?text=' + cat
-        };
-    });
+  const categoryList = useMemo(() => {
+      const standardNames = new Set(CATEGORIES.map(c => c.name));
+      const customCategories = Array.from(new Set(products.map(p => p.category)))
+        .filter(cat => cat && !standardNames.has(cat) && cat !== 'OTHER')
+        .map(cat => {
+            const sampleProduct = products.find(p => p.category === cat);
+            return {
+                id: `cat-custom-${cat.replace(/\s+/g, '-').toLowerCase()}`,
+                name: cat,
+                icon: 'tag',
+                image: sampleProduct?.images[0] || 'https://via.placeholder.com/150?text=' + cat
+            };
+        });
 
-  const categoryList = [
-      { id: 'cat-all', name: 'All', icon: 'layer-group', image: '' },
-      ...CATEGORIES,
-      ...customCategories
-  ];
+      return [
+          { id: 'cat-all', name: 'All', icon: 'layer-group', image: '' },
+          ...CATEGORIES,
+          ...customCategories
+      ];
+  }, [products]);
 
-  // 2. Filtering
-  const approvedProducts = products.filter(p => p.status === 'approved');
-  let filteredProducts = selectedCat === 'All' 
-     ? approvedProducts 
-     : approvedProducts.filter(p => p.category === selectedCat);
+  // 2. Filtering & Sorting with useMemo for Performance
+  const sortedProducts = useMemo(() => {
+      const approvedProducts = products.filter(p => p.status === 'approved');
+      let filtered = selectedCat === 'All' 
+         ? approvedProducts 
+         : approvedProducts.filter(p => p.category === selectedCat);
 
-  // 3. Sorting Logic
-  if (sortType === 'price') {
-      filteredProducts = [...filteredProducts].sort((a, b) => a.price - b.price);
-  } else if (sortType === 'rating') {
-      filteredProducts = [...filteredProducts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  } else if (sortType === 'nearby' && userLocation) {
-      filteredProducts = [...filteredProducts].sort((a, b) => {
-          const coordsA = getCoordsForLocation(a.location);
-          const coordsB = getCoordsForLocation(b.location);
+      if (sortType === 'price') {
+          return [...filtered].sort((a, b) => a.price - b.price);
+      } else if (sortType === 'rating') {
+          return [...filtered].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      } else if (sortType === 'nearby' && userLocation) {
+          // Pre-calculate distances to avoid expensive re-calc in sort loop
+          const distMap = new Map<string, number>();
+          filtered.forEach(p => {
+              const coords = getCoordsForLocation(p.location);
+              const dist = coords ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : 9999;
+              distMap.set(p.id, dist);
+          });
           
-          const distA = coordsA ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, coordsA.lat, coordsA.lng) : 9999;
-          const distB = coordsB ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, coordsB.lat, coordsB.lng) : 9999;
-          
-          return distA - distB;
-      });
-  }
+          return [...filtered].sort((a, b) => (distMap.get(a.id) || 9999) - (distMap.get(b.id) || 9999));
+      }
+      return filtered;
+  }, [products, selectedCat, sortType, userLocation]);
 
   const FilterButton = ({ type, label }: { type: 'nearby'|'price'|'rating', label: string }) => (
       <button 
@@ -291,7 +295,11 @@ export const BuyerDashboard: React.FC = () => {
             {selectedCat !== 'All' && <span className="text-[10px] font-bold text-red-500 cursor-pointer bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition-colors" onClick={() => setSelectedCat('All')}>Clear</span>}
          </div>
          
-         {filteredProducts.length === 0 ? (
+         {isDataLoading ? (
+             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                 {[...Array(10)].map((_, i) => <ProductCardSkeleton key={i} />)}
+             </div>
+         ) : sortedProducts.length === 0 ? (
              <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 mx-1">
                  <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-3">
                     <i className="fa-solid fa-box-open text-xl text-gray-300"></i>
@@ -300,7 +308,7 @@ export const BuyerDashboard: React.FC = () => {
              </div>
          ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {filteredProducts.map(product => {
+                {sortedProducts.map(product => {
                     const vendor = vendors.find(v => v.vendorId === product.vendorId);
                     const mainImage = product.images && product.images.length > 0 ? product.images[0] : 'https://via.placeholder.com/300';
                     const isFav = favorites.includes(product.id);

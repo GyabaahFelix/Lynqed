@@ -10,7 +10,9 @@ export const BottomNav: React.FC = () => {
   const location = useLocation();
   
   if (currentRole === 'admin') return null;
-  if (location.pathname.startsWith('/auth') || location.pathname === '/') return null;
+  // Exclude new auth routes
+  if (location.pathname.startsWith('/auth') || location.pathname === '/' || location.pathname === '/forgot-password' || location.pathname === '/update-password') return null;
+  
   // Hide global nav on product detail pages to allow specific action bars to be visible
   if (location.pathname.includes('/product/') || location.pathname.includes('/checkout')) return null;
 
@@ -76,7 +78,8 @@ export const Navbar: React.FC = () => {
   const location = useLocation();
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const isAuthPage = location.pathname === '/' || location.pathname.startsWith('/auth');
+  // Hide on auth pages including new password routes
+  const isAuthPage = location.pathname === '/' || location.pathname.startsWith('/auth') || location.pathname === '/forgot-password' || location.pathname === '/update-password';
   if (isAuthPage) return null;
 
   const mainRoutes = ['/', '/login', '/buyer/dashboard', '/vendor/dashboard', '/admin/dashboard', '/delivery/dashboard'];

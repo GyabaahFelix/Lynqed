@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 
 // --- Avatar (New Component) ---
@@ -157,6 +156,27 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; onC
 // --- Spinner ---
 export const Spinner: React.FC = () => (
     <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-200 border-b-primary"></div>
+);
+
+// --- Skeleton Loaders ---
+export const Skeleton: React.FC<{ className?: string }> = ({ className }) => (
+    <div className={`animate-pulse bg-gray-200 rounded-xl ${className}`}></div>
+);
+
+export const ProductCardSkeleton: React.FC = () => (
+    <div className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 h-full flex flex-col">
+        <div className="aspect-square w-full bg-gray-200 animate-pulse"></div>
+        <div className="p-3 flex flex-col justify-between flex-grow">
+            <div>
+                <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            </div>
+            <div className="flex justify-between items-center mt-3">
+                <div className="h-5 bg-gray-200 rounded w-1/3 animate-pulse"></div>
+                <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse"></div>
+            </div>
+        </div>
+    </div>
 );
 
 // --- Toast Notification ---
