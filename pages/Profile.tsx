@@ -4,6 +4,42 @@ import { useApp } from '../context';
 import { Button, Card, Input, Badge, Avatar } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
 
+const BuyerSettings: React.FC = () => {
+    const { currentUser } = useApp();
+    const [name, setName] = useState(currentUser?.name || '');
+    const [email, setEmail] = useState(currentUser?.email || '');
+
+    return (
+        <Card className="p-4">
+            <h3 className="font-bold text-sm mb-3 text-gray-900">Personal Settings</h3>
+            <Input label="Full Name" value={name} onChange={e => setName(e.target.value)} />
+            <Input label="Email" value={email} disabled className="opacity-50" />
+            <Button size="sm" fullWidth>Update Profile</Button>
+        </Card>
+    );
+};
+
+const VendorSettings: React.FC = () => {
+    const { currentUser, vendors } = useApp();
+    const currentVendor = vendors.find(v => v.userId === currentUser?.id);
+    
+    const [storeName, setStoreName] = useState(currentVendor?.storeName || '');
+    const [desc, setDesc] = useState(currentVendor?.storeDescription || '');
+    const [phone, setPhone] = useState(currentVendor?.contactPhone || '');
+
+    if (!currentVendor) return null;
+
+    return (
+        <Card className="p-4">
+            <h3 className="font-bold text-sm mb-3 text-gray-900">Store Settings</h3>
+            <Input label="Store Name" value={storeName} onChange={e => setStoreName(e.target.value)} />
+            <Input label="Description" value={desc} onChange={e => setDesc(e.target.value)} />
+            <Input label="Business Phone" value={phone} onChange={e => setPhone(e.target.value)} />
+            <Button size="sm" fullWidth>Save Changes</Button>
+        </Card>
+    );
+};
+
 export const UserProfile: React.FC = () => {
     const { currentUser, currentRole, logout, switchRole, registerDeliveryPerson, orders, deliveryPersons, requestNotificationPermission } = useApp();
     const navigate = useNavigate();
@@ -35,22 +71,12 @@ export const UserProfile: React.FC = () => {
         }
     };
 
-    const handleSmsToggle = () => {
-        if (!smsEnabled) {
-             // Mock check
-             alert("SMS Alerts Enabled. (Note: This requires a paid API integration. Simulated for now).");
-        }
-        setSmsEnabled(!smsEnabled);
-    };
-
     const myOrders = orders
         .filter(o => o.buyerId === currentUser.id)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    // Check delivery status
     const deliveryProfile = deliveryPersons.find(d => d.userId === currentUser.id);
     const isDeliveryApproved = deliveryProfile?.status === 'approved';
-    const isDeliveryPending = deliveryProfile?.status === 'pending';
 
     return (
         <div className="min-h-screen bg-gray-50 pb-24">
@@ -66,11 +92,17 @@ export const UserProfile: React.FC = () => {
                 <h1 className="text-xl font-bold text-gray-900">{currentUser.name}</h1>
                 <p className="text-gray-500 text-sm">{currentUser.email}</p>
                 <div className="mt-4 flex justify-center gap-2">
-                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-600 uppercase tracking-wide">{currentRole} Mode</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wide ${currentRole === 'vendor' ? 'bg-pink-100 text-pink-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {currentRole} Mode
+                    </span>
                 </div>
             </div>
 
             <div className="p-4 space-y-4 -mt-6">
+                
+                {/* DYNAMIC SETTINGS BASED ON ROLE */}
+                {currentRole === 'vendor' ? <VendorSettings /> : <BuyerSettings />}
+
                 {/* Role Switching */}
                 <Card className="p-4">
                     <h3 className="font-bold text-sm mb-3 text-gray-900">Switch Role</h3>
@@ -96,7 +128,6 @@ export const UserProfile: React.FC = () => {
                             <Button variant="outline" fullWidth size="sm" onClick={() => navigate('/vendor/onboarding')}>Become Vendor</Button>
                         )}
 
-                        {/* Delivery Role Switch */}
                         {isDeliveryApproved && (
                              <Button 
                                 variant={currentRole === 'deliveryPerson' ? 'primary' : 'outline'} 
@@ -111,40 +142,26 @@ export const UserProfile: React.FC = () => {
                     </div>
                 </Card>
 
-                {/* Notification Settings (For Vendors) */}
+                {/* Vendor Notification Settings */}
                 {currentRole === 'vendor' && (
                     <Card className="p-4">
                          <h3 className="font-bold text-sm mb-3 text-gray-900">Notifications</h3>
-                         <div className="space-y-3">
-                             <div className="flex items-center justify-between">
-                                 <div>
-                                     <p className="text-sm font-bold text-gray-700">Push Alerts</p>
-                                     <p className="text-xs text-gray-400">Get notified on device</p>
-                                 </div>
-                                 <div 
-                                    onClick={handlePushToggle}
-                                    className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${pushEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
-                                 >
-                                     <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${pushEnabled ? 'left-5' : 'left-0.5'}`}></div>
-                                 </div>
+                         <div className="flex items-center justify-between">
+                             <div>
+                                 <p className="text-sm font-bold text-gray-700">Push Alerts</p>
+                                 <p className="text-xs text-gray-400">Sound & Screen Popup</p>
                              </div>
-                             <div className="flex items-center justify-between">
-                                 <div>
-                                     <p className="text-sm font-bold text-gray-700">SMS Alerts</p>
-                                     <p className="text-xs text-gray-400">Send text to phone</p>
-                                 </div>
-                                 <div 
-                                    onClick={handleSmsToggle}
-                                    className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${smsEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
-                                 >
-                                     <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${smsEnabled ? 'left-5' : 'left-0.5'}`}></div>
-                                 </div>
+                             <div 
+                                onClick={handlePushToggle}
+                                className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${pushEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                             >
+                                 <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${pushEnabled ? 'left-5' : 'left-0.5'}`}></div>
                              </div>
                          </div>
                     </Card>
                 )}
 
-                {/* Order History Preview */}
+                {/* Buyer Recent Orders */}
                 {currentRole === 'buyer' && (
                     <Card className="p-4">
                          <div className="flex justify-between items-center mb-3 border-b border-gray-50 pb-2">
@@ -159,12 +176,8 @@ export const UserProfile: React.FC = () => {
                                              <span className="font-bold text-sm text-gray-800">#{o.id.slice(-5)}</span>
                                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{new Date(o.createdAt).toLocaleDateString()}</span>
                                          </div>
-                                         <p className="text-xs text-gray-500">{o.items.length} items • {o.deliveryOption}</p>
                                      </div>
-                                     <div className="text-right">
-                                         <p className="font-bold text-sm text-gray-900">₵{o.total.toFixed(2)}</p>
-                                         <span className={`text-[10px] font-bold uppercase ${o.status === 'delivered' ? 'text-green-600' : 'text-blue-600'}`}>{o.status.replace('_', ' ')}</span>
-                                     </div>
+                                     <span className={`text-[10px] font-bold uppercase ${o.status === 'delivered' ? 'text-green-600' : 'text-blue-600'}`}>{o.status.replace('_', ' ')}</span>
                                  </div>
                              ))}
                              {myOrders.length === 0 && <p className="text-sm text-center text-gray-400 py-4">No past orders found.</p>}
@@ -173,14 +186,10 @@ export const UserProfile: React.FC = () => {
                 )}
 
                 {/* Delivery Registration */}
-                {!isDeliveryApproved && (
+                {(!isDeliveryApproved && currentRole === 'buyer') && (
                     <Card className="p-4">
                         <h3 className="font-bold text-sm mb-2 text-gray-900">Delivery Opportunities</h3>
-                        {isDeliveryPending ? (
-                            <div className="bg-yellow-50 text-yellow-700 p-3 rounded-xl text-sm font-medium flex items-center gap-2">
-                                <i className="fa-solid fa-clock"></i> Application Pending
-                            </div>
-                        ) : !showDeliveryForm ? (
+                        {!showDeliveryForm ? (
                             <div onClick={() => setShowDeliveryForm(true)} className="flex items-center justify-between cursor-pointer py-2 hover:bg-gray-50 rounded px-2 -mx-2 transition-colors">
                                 <span className="text-sm text-gray-600">Register as Delivery Person</span>
                                 <i className="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
@@ -200,7 +209,6 @@ export const UserProfile: React.FC = () => {
                                 >
                                     <option value="bicycle">Bicycle</option>
                                     <option value="motorbike">Motorbike</option>
-                                    <option value="scooter">Scooter</option>
                                 </select>
                                 <div className="flex gap-2">
                                     <Button type="submit" size="sm" fullWidth>Submit</Button>
@@ -220,163 +228,101 @@ export const UserProfile: React.FC = () => {
 export const OrdersPage: React.FC = () => {
     const { orders, currentUser } = useApp();
     const navigate = useNavigate();
-    const myOrders = orders
-        .filter(o => o.buyerId === currentUser?.id)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    // Helper for Stepper
-    const getStepStatus = (current: string, step: string) => {
-        const steps = ['placed', 'received', 'in_route', 'delivered'];
-        const cIdx = steps.indexOf(current);
-        const sIdx = steps.indexOf(step);
-        return cIdx >= sIdx ? 'text-primary font-bold' : 'text-gray-300';
-    };
-
+    const myOrders = orders.filter(o => o.buyerId === currentUser?.id);
     return (
         <div className="min-h-screen bg-gray-50 p-4 pb-24">
             <div className="flex items-center mb-6">
                 <button onClick={() => navigate(-1)} className="mr-4 w-8 h-8 bg-white rounded-full shadow-sm flex items-center justify-center"><i className="fa-solid fa-arrow-left"></i></button>
                 <h1 className="text-xl font-bold">My Orders</h1>
             </div>
-
-            <div className="space-y-6">
-                {myOrders.map(order => (
-                    <Card key={order.id} className="p-5">
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-bold text-gray-900">#{order.id.slice(-5)}</span>
-                                    <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{new Date(order.createdAt).toLocaleDateString()}</span>
-                                </div>
-                                <p className="font-bold text-lg mt-1 text-primary">₵{order.total.toFixed(2)}</p>
+            
+            <div className="space-y-4">
+                {myOrders.length === 0 ? <p className="text-center text-gray-400 py-10">No orders found.</p> : (
+                    myOrders.map(o => (
+                        <Card key={o.id} className="p-4">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="font-bold text-gray-900">#{o.id.slice(-5)}</span>
+                                <Badge color="blue">{o.status}</Badge>
                             </div>
-                            <Badge color={order.deliveryOption === 'delivery' ? 'blue' : 'yellow'}>
-                                {order.deliveryOption}
-                            </Badge>
-                        </div>
-
-                        {/* Simplified Stepper */}
-                        <div className="flex justify-between text-[10px] sm:text-xs mb-5 relative mt-2">
-                            {/* Line */}
-                            <div className="absolute top-2 left-2 right-2 h-0.5 bg-gray-100 -z-10"></div>
-                            
-                            <div className={`flex flex-col items-center bg-white px-1 ${getStepStatus(order.status, 'placed')}`}>
-                                <i className={`fa-solid fa-circle-check mb-1 text-sm ${getStepStatus(order.status, 'placed').includes('primary') ? 'text-primary' : 'text-gray-200'}`}></i> Placed
+                            <div className="text-sm text-gray-600">
+                                {o.items.map((i, idx) => <div key={idx}>{i.quantity}x {i.product.title}</div>)}
                             </div>
-                             <div className={`flex flex-col items-center bg-white px-1 ${getStepStatus(order.status, 'received')}`}>
-                                <i className={`fa-solid fa-store mb-1 text-sm ${getStepStatus(order.status, 'received').includes('primary') ? 'text-primary' : 'text-gray-200'}`}></i> Received
+                            <div className="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center">
+                                <span className="text-xs text-gray-400">{new Date(o.createdAt).toLocaleDateString()}</span>
+                                <span className="font-bold text-gray-900">₵{o.total.toFixed(2)}</span>
                             </div>
-                             <div className={`flex flex-col items-center bg-white px-1 ${getStepStatus(order.status, 'in_route')}`}>
-                                <i className={`fa-solid fa-truck mb-1 text-sm ${getStepStatus(order.status, 'in_route').includes('primary') ? 'text-primary' : 'text-gray-200'}`}></i> In Route
-                            </div>
-                             <div className={`flex flex-col items-center bg-white px-1 ${getStepStatus(order.status, 'delivered')}`}>
-                                <i className={`fa-solid fa-box-open mb-1 text-sm ${getStepStatus(order.status, 'delivered').includes('primary') ? 'text-primary' : 'text-gray-200'}`}></i> Delivered
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50/80 p-3 rounded-xl text-xs text-gray-600 space-y-2 border border-gray-100">
-                            {order.items.map((i, idx) => (
-                                <div key={idx} className="flex justify-between items-center">
-                                    <span className="font-medium">{i.product.title} <span className="text-gray-400">x{i.quantity}</span></span>
-                                    <span className="font-bold text-gray-900">₵{(i.product.price * i.quantity).toFixed(2)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                ))}
-                {myOrders.length === 0 && (
-                     <div className="text-center py-20 text-gray-400">
-                        <i className="fa-solid fa-receipt text-4xl mb-4 opacity-30"></i>
-                        <p>You haven't placed any orders yet.</p>
-                        <Button size="sm" className="mt-4" onClick={() => navigate('/buyer/dashboard')}>Start Shopping</Button>
-                    </div>
+                        </Card>
+                    ))
                 )}
             </div>
         </div>
-    );
+    )
 };
 
 export const WishlistPage: React.FC = () => {
-    const { favorites, products, toggleFavorite, addToCart, vendors } = useApp();
+    const { favorites, products, toggleFavorite, addToCart } = useApp();
     const navigate = useNavigate();
     
-    const favProducts = products.filter(p => favorites.includes(p.id));
+    // Filter products that are in the favorites list
+    const wishlistItems = products.filter(p => favorites.includes(p.id));
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 pb-24">
-             <div className="flex items-center mb-6">
-                <button onClick={() => navigate(-1)} className="mr-4 w-8 h-8 bg-white rounded-full shadow-sm flex items-center justify-center"><i className="fa-solid fa-arrow-left"></i></button>
-                <h1 className="text-xl font-bold">My Wishlist</h1>
-                <span className="ml-2 text-sm text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200">{favProducts.length}</span>
+        <div className="min-h-screen bg-gray-50 pb-24">
+            {/* Header */}
+            <div className="bg-white p-4 shadow-sm sticky top-0 z-10 flex items-center gap-3">
+                <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
+                    <i className="fa-solid fa-arrow-left"></i>
+                </button>
+                <h1 className="text-xl font-bold font-display">My Wishlist ({favorites.length})</h1>
             </div>
 
-            {favProducts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
-                        <i className="fa-regular fa-heart text-3xl text-gray-300"></i>
+            <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {wishlistItems.length === 0 ? (
+                    <div className="col-span-full text-center py-20 text-gray-400">
+                        <i className="fa-regular fa-heart text-4xl mb-4 opacity-20"></i>
+                        <p>Your wishlist is empty.</p>
+                        <Button className="mt-4" onClick={() => navigate('/buyer/dashboard')}>Start Exploring</Button>
                     </div>
-                    <h2 className="text-gray-900 font-bold text-lg">Your wishlist is empty</h2>
-                    <p className="text-gray-500 text-sm mt-2 max-w-xs mx-auto">Tap the heart icon on products you like to save them for later.</p>
-                    <Button className="mt-6" onClick={() => navigate('/buyer/dashboard')}>Explore Products</Button>
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {favProducts.map(product => {
-                         const vendor = vendors.find(v => v.vendorId === product.vendorId);
-                         return (
-                            <div 
-                                key={product.id} 
-                                className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 hover:shadow-xl transition-all duration-300 group relative flex flex-col h-full cursor-pointer"
-                                onClick={() => navigate(`/buyer/product/${product.id}`)}
-                            >
-                                {/* Image - Fills large space */}
-                                <div className="aspect-[4/5] w-full relative overflow-hidden">
-                                    <img 
-                                        src={product.images[0] || 'https://via.placeholder.com/300'} 
-                                        alt={product.title} 
-                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                                    />
-                                    
-                                    {/* Remove Fav Button */}
+                ) : (
+                    wishlistItems.map(product => (
+                        <div key={product.id} className="bg-white rounded-2xl overflow-hidden shadow-card border border-gray-100 group relative flex flex-col h-full">
+                            <div className="aspect-square w-full relative overflow-hidden bg-gray-50">
+                                <img 
+                                    src={product.images[0]} 
+                                    alt={product.title} 
+                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                                    onClick={() => navigate(`/buyer/product/${product.id}`)}
+                                />
+                                <button 
+                                    className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/90 text-red-500 flex items-center justify-center shadow-sm active:scale-90"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleFavorite(product.id);
+                                    }}
+                                >
+                                    <i className="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                            <div className="p-3 flex flex-col flex-grow justify-between">
+                                <h3 className="text-xs font-bold text-gray-800 line-clamp-2 mb-1">{product.title}</h3>
+                                <div className="flex items-center justify-between mt-1">
+                                    <span className="text-sm font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
                                     <button 
-                                        className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white border border-red-100 text-red-500 flex items-center justify-center transition-colors shadow-sm active:scale-90 hover:bg-red-50"
+                                        className="w-7 h-7 rounded-full bg-black text-white flex items-center justify-center shadow-md active:scale-90 hover:bg-primary transition-colors"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            toggleFavorite(product.id);
+                                            addToCart(product);
                                         }}
+                                        disabled={product.stock === 0}
                                     >
-                                        <i className="fa-solid fa-heart text-xs"></i>
+                                        <i className="fa-solid fa-plus text-xs"></i>
                                     </button>
-    
-                                    {product.stock === 0 && <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10"><span className="bg-black/80 text-white text-[10px] px-3 py-1 rounded font-bold uppercase tracking-wide">Out of Stock</span></div>}
-                                </div>
-    
-                                {/* Bottom Details */}
-                                <div className="p-3 bg-white flex flex-col justify-between flex-grow relative z-10">
-                                    <div>
-                                        <h3 className="text-xs text-gray-800 font-bold leading-tight line-clamp-2 mb-1">{product.title}</h3>
-                                        <p className="text-[10px] text-gray-400 line-clamp-1">{vendor?.storeName}</p>
-                                    </div>
-                                    
-                                    <div className="flex items-center justify-between mt-2">
-                                        <span className="text-sm font-extrabold text-gray-900">{product.currency}{product.price.toFixed(2)}</span>
-                                        <button 
-                                            className={`w-7 h-7 rounded-full flex items-center justify-center text-white transition-all shadow-md active:scale-90 ${product.stock > 0 ? 'bg-black hover:bg-primary' : 'bg-gray-300 cursor-not-allowed'}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if(product.stock > 0) addToCart(product);
-                                            }}
-                                            disabled={product.stock === 0}
-                                        >
-                                            <i className="fa-solid fa-plus text-xs"></i>
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
-                         );
-                    })}
-                </div>
-            )}
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
     );
 };

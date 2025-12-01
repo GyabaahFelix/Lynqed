@@ -32,7 +32,7 @@ export const BottomNav: React.FC = () => {
   );
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-[80px] bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex justify-around items-end z-40 pb-safe px-2">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 h-[80px] bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex justify-around items-end z-40 pb-safe px-2">
       {currentRole === 'buyer' || currentRole === 'guest' ? (
         <>
           <NavItem to="/buyer/dashboard" icon="house" label="Home" active={isActive('/buyer/dashboard')} />
@@ -57,7 +57,7 @@ export const BottomNav: React.FC = () => {
         <>
           <NavItem to="/vendor/dashboard" icon="chart-pie" label="Dashboard" active={isActive('/vendor/dashboard')} />
           <NavItem to="/vendor/products" icon="box-open" label="Products" active={isActive('/vendor/products')} />
-          <div className="w-6"></div> {/* Spacer for aesthetic balance if needed, though not centering a big button here */}
+          <div className="w-6"></div> {/* Spacer for aesthetic balance */}
           <NavItem to="/vendor/orders" icon="receipt" label="Orders" active={isActive('/vendor/orders')} />
           <NavItem to="/vendor/profile" icon="store" label="Profile" active={isActive('/vendor/profile')} />
         </>
@@ -73,43 +73,84 @@ export const BottomNav: React.FC = () => {
 
 // --- Top Navbar (Desktop/Global) ---
 export const Navbar: React.FC = () => {
-  const { currentUser, currentRole, logout } = useApp();
+  const { currentUser, currentRole, logout, cart } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Hide on auth pages including new password routes
+  // Hide on auth pages
   const isAuthPage = location.pathname === '/' || location.pathname.startsWith('/auth') || location.pathname === '/forgot-password' || location.pathname === '/update-password';
   if (isAuthPage) return null;
 
   const mainRoutes = ['/', '/login', '/buyer/dashboard', '/vendor/dashboard', '/admin/dashboard', '/delivery/dashboard'];
   const showBackButton = !mainRoutes.includes(location.pathname);
 
+  // Desktop Nav Links Helper - Clean Text Style
+  const NavLink = ({ to, label }: { to: string, label: string }) => (
+      <Link to={to} className={`text-sm font-semibold transition-all px-4 py-2 rounded-lg hover:bg-gray-50 ${location.pathname === to ? 'text-primary' : 'text-gray-600 hover:text-gray-900'}`}>
+          {label}
+      </Link>
+  );
+
   return (
     <nav className="sticky top-0 z-40 w-full glass border-b border-white/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
+        <div className="flex justify-between h-16 items-center relative">
           
-          <div className="flex items-center gap-4">
-             {showBackButton ? (
+          {/* Left: Logo & Back Button */}
+          <div className="flex items-center gap-4 flex-shrink-0">
+             {showBackButton && (
                  <button 
                     onClick={() => navigate(-1)} 
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-white/80 hover:bg-white border border-gray-100 text-gray-700 transition-all shadow-sm active:scale-95"
+                    className="md:hidden w-10 h-10 flex items-center justify-center rounded-full bg-white/80 hover:bg-white border border-gray-100 text-gray-700 transition-all shadow-sm active:scale-95"
                  >
                      <i className="fa-solid fa-arrow-left text-sm"></i>
                  </button>
-             ) : (
-               // Logo
-               <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-                  <div className="w-9 h-9 bg-gradient-to-tr from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 text-white">
-                    <i className="fa-solid fa-bolt"></i>
-                  </div>
-                  <span className="text-xl font-display font-extrabold text-gray-900 tracking-tight">LYNQED</span>
-               </div>
              )}
+             
+             {/* Logo */}
+             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+                <div className="w-9 h-9 bg-gradient-to-tr from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 text-white">
+                  <i className="fa-solid fa-bolt"></i>
+                </div>
+                <span className="text-xl font-display font-extrabold text-gray-900 tracking-tight">LYNQED</span>
+             </div>
           </div>
+
+          {/* Center: Desktop Navigation Links (Text Only) */}
+          {currentUser && (
+             <div className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 items-center gap-6">
+                 {currentRole === 'buyer' && (
+                     <>
+                        <NavLink to="/buyer/dashboard" label="Home" />
+                        <NavLink to="/buyer/search" label="Search" />
+                        <NavLink to="/buyer/orders" label="Orders" />
+                     </>
+                 )}
+                 {currentRole === 'vendor' && (
+                     <>
+                        <NavLink to="/vendor/dashboard" label="Dashboard" />
+                        <NavLink to="/vendor/products" label="Products" />
+                        <NavLink to="/vendor/orders" label="Orders" />
+                     </>
+                 )}
+             </div>
+          )}
           
-          <div className="flex items-center space-x-4">
+          {/* Right: Cart & Profile */}
+          <div className="flex items-center space-x-4 flex-shrink-0">
+             {/* Desktop Cart */}
+             {currentRole === 'buyer' && (
+                 <Link to="/buyer/cart" className="hidden md:flex relative w-10 h-10 items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+                     <i className="fa-solid fa-cart-shopping text-gray-600"></i>
+                     {cart.length > 0 && (
+                        <span className="absolute top-0 right-0 bg-accent text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-white">
+                            {cart.length}
+                        </span>
+                     )}
+                 </Link>
+             )}
+
              {currentUser ? (
                <div className="relative">
                   <button 
@@ -122,6 +163,7 @@ export const Navbar: React.FC = () => {
                         size="sm"
                         className="border-2 border-white shadow-sm bg-white"
                     />
+                    <span className="hidden md:block text-sm font-bold text-gray-700">{currentUser.name.split(' ')[0]}</span>
                     <i className={`fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-300 ${showDropdown ? 'rotate-180' : ''}`}></i>
                   </button>
 
@@ -149,60 +191,26 @@ export const Navbar: React.FC = () => {
                                 </Link>
                                 
                                 {currentRole === 'buyer' && (
-                                    <>
-                                        <Link 
-                                        to="/buyer/orders" 
-                                        className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
-                                        onClick={() => setShowDropdown(false)}
-                                        >
-                                            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
-                                                <i className="fa-solid fa-box-open"></i>
-                                            </div>
-                                            My Orders
-                                        </Link>
-                                        <Link 
-                                        to="/buyer/wishlist" 
-                                        className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
-                                        onClick={() => setShowDropdown(false)}
-                                        >
-                                            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
-                                                <i className="fa-solid fa-heart"></i>
-                                            </div>
-                                            Wishlist
-                                        </Link>
-                                    </>
-                                )}
-
-                                {currentRole === 'vendor' && (
                                     <Link 
-                                      to="/vendor/dashboard" 
-                                      className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
-                                      onClick={() => setShowDropdown(false)}
+                                    to="/buyer/wishlist" 
+                                    className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
+                                    onClick={() => setShowDropdown(false)}
                                     >
                                         <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
-                                            <i className="fa-solid fa-chart-pie"></i>
+                                            <i className="fa-solid fa-heart"></i>
                                         </div>
-                                        Dashboard
-                                    </Link>
-                                )}
-
-                                {currentRole === 'deliveryPerson' && (
-                                     <Link 
-                                      to="/delivery/dashboard" 
-                                      className="flex items-center px-6 py-3 text-sm text-gray-600 hover:bg-indigo-50 hover:text-primary transition-colors group"
-                                      onClick={() => setShowDropdown(false)}
-                                    >
-                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mr-3 group-hover:bg-white text-gray-400 group-hover:text-primary transition-colors shadow-sm">
-                                            <i className="fa-solid fa-motorcycle"></i>
-                                        </div>
-                                        Delivery Hub
+                                        Wishlist
                                     </Link>
                                 )}
                               </div>
                               
                               <div className="border-t border-gray-100 py-2">
                                 <button 
-                                  onClick={() => { logout(); setShowDropdown(false); navigate('/'); }}
+                                  onClick={async () => { 
+                                      await logout(); 
+                                      setShowDropdown(false); 
+                                      navigate('/'); 
+                                  }}
                                   className="flex w-full items-center px-6 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors"
                                 >
                                     <i className="fa-solid fa-arrow-right-from-bracket w-8 mr-3"></i> Sign Out
@@ -234,7 +242,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isProductDetail = location.pathname.includes('/product/');
   const isCheckout = location.pathname.includes('/checkout');
 
-  // Add padding only if global bottom nav is visible
+  // Add padding only if global bottom nav is visible (MOBILE ONLY)
   const isBottomNavVisible = !(currentRole === 'admin' || isSearchPage || isWelcome || isProductDetail || isCheckout);
 
   return (
@@ -243,7 +251,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       {!isSearchPage && !isWelcome && <Navbar />}
       
-      <main className={`flex-grow flex flex-col ${isBottomNavVisible ? 'pb-[90px]' : ''}`}>
+      <main className={`flex-grow flex flex-col ${isBottomNavVisible ? 'pb-[90px] md:pb-0' : ''}`}>
         {children}
       </main>
       
