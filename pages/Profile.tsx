@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useApp } from '../context';
 import { Button, Card, Input, Badge, Avatar } from '../components/UI';
@@ -50,11 +49,13 @@ export const UserProfile: React.FC = () => {
 
     if (!currentUser) return <div>Please login</div>;
 
-    const handleDeliverySubmit = (e: React.FormEvent) => {
+    const handleDeliverySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        registerDeliveryPerson(deliveryForm);
-        setShowDeliveryForm(false);
-        alert("Registration submitted! Wait for admin approval.");
+        const result = await registerDeliveryPerson(deliveryForm);
+        if (result.success) {
+             setShowDeliveryForm(false);
+             alert("Registration submitted! Wait for admin approval.");
+        }
     };
 
     const handlePushToggle = async () => {

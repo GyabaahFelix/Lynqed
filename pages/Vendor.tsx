@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context';
@@ -6,20 +5,28 @@ import { Button, Input, Card, Badge, Avatar } from '../components/UI';
 import { CATEGORIES } from '../constants';
 import { OrderStatus, Product } from '../types';
 
-const readFile = (file: File): Promise<string> => {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.readAsDataURL(file);
-  });
-};
-
 export const VendorDashboard: React.FC = () => {
-  const { products, orders, currentUser, vendors } = useApp();
+  const { products, orders, currentUser, vendors, isDataLoading } = useApp();
   const navigate = useNavigate();
   
   const currentVendor = useMemo(() => vendors.find(v => v.userId === currentUser?.id), [vendors, currentUser]);
   const vendorId = currentVendor?.vendorId;
+
+  // New Check: If user is vendor role but has no profile, prompt to onboard
+  if (!isDataLoading && !currentVendor && currentUser) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 flex-col text-center">
+              <div className="bg-white p-8 rounded-2xl shadow-lg max-w-sm">
+                  <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4 text-yellow-600 text-2xl">
+                    <i className="fa-solid fa-store"></i>
+                  </div>
+                  <h2 className="text-xl font-bold mb-2">Store Setup Incomplete</h2>
+                  <p className="text-gray-500 mb-6 text-sm">You have a vendor account but haven't set up your store details yet.</p>
+                  <Button fullWidth onClick={() => navigate('/vendor/onboarding')}>Complete Store Setup</Button>
+              </div>
+          </div>
+      )
+  }
 
   // Optimized Calculations
   const pendingOrders = useMemo(() => {
@@ -66,9 +73,19 @@ export const VendorDashboard: React.FC = () => {
 };
 
 export const VendorProducts: React.FC = () => {
-    const { products, vendors, currentUser } = useApp();
+    const { products, vendors, currentUser, isDataLoading } = useApp();
     const navigate = useNavigate();
     const currentVendor = vendors.find(v => v.userId === currentUser?.id);
+
+    if (!isDataLoading && !currentVendor) {
+         return (
+             <div className="p-8 text-center pt-20">
+                 <h2 className="text-xl font-bold mb-4">Store Profile Missing</h2>
+                 <Button onClick={() => navigate('/vendor/onboarding')}>Set Up Store</Button>
+             </div>
+         );
+    }
+
     const myProducts = products.filter(p => p.vendorId === currentVendor?.vendorId);
 
     return (
@@ -168,17 +185,6 @@ export const VendorOrders: React.FC = () => {
                 ))}
             </div>
 
-            {/* DEBUG INFO: Only shows if empty */}
-            {filteredOrders.length === 0 && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-yellow-800 font-mono">
-                    <p><strong>Debug Status:</strong></p>
-                    <p>Current Vendor ID: {vendorId || 'Not Found'}</p>
-                    <p>Total Orders in System: {orders.length}</p>
-                    <p>Orders matching this Vendor: {myOrders.length}</p>
-                    <p>Current Filter: {filter}</p>
-                </div>
-            )}
-
             <div className="space-y-4">
                 {filteredOrders.length === 0 ? <p className="text-center py-10 text-gray-400">No orders found.</p> : 
                     filteredOrders.map(order => {
@@ -215,12 +221,12 @@ export const VendorOrders: React.FC = () => {
     );
 };
 
-// ... Rest of the file (ProductForm, AddProduct, EditProduct, VendorOnboarding) remains same but included for completeness in a real file replacement ...
 const ProductForm: React.FC<{
   initialData?: Partial<Product>;
   onSubmit: (data: any) => Promise<void>;
   isLoading?: boolean;
 }> = ({ initialData, onSubmit, isLoading }) => {
+  const { uploadFile, showToast } = useApp();
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     description: initialData?.description || '',
@@ -233,12 +239,28 @@ const ProductForm: React.FC<{
   });
   
   const [images, setImages] = useState<string[]>(initialData?.images || []);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0) {
-          const newImages = await Promise.all(Array.from(e.target.files).map(readFile));
-          setImages([...images, ...newImages]);
+          setIsUploading(true);
+          const files = Array.from(e.target.files);
+          const newImageUrls: string[] = [];
+
+          for (const file of files) {
+              if (file.size > 5 * 1024 * 1024) {
+                  showToast(`File ${file.name} is too large (max 5MB)`, 'error');
+                  continue;
+              }
+              const url = await uploadFile(file, 'products');
+              if (url) newImageUrls.push(url);
+          }
+          
+          setImages(prev => [...prev, ...newImageUrls]);
+          setIsUploading(false);
+          // Clear input
+          if(fileInputRef.current) fileInputRef.current.value = '';
       }
   };
 
@@ -293,11 +315,15 @@ const ProductForm: React.FC<{
                         </div>
                     ))}
                     <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-primary hover:text-primary cursor-pointer transition-colors bg-gray-50"
+                        onClick={() => !isUploading && fileInputRef.current?.click()}
+                        className={`aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-primary hover:text-primary cursor-pointer transition-colors bg-gray-50 ${isUploading ? 'opacity-50 cursor-wait' : ''}`}
                     >
-                        <i className="fa-solid fa-cloud-arrow-up text-xl mb-1"></i>
-                        <span className="text-[10px] font-bold">Upload</span>
+                        {isUploading ? (
+                             <i className="fa-solid fa-spinner fa-spin text-xl mb-1"></i>
+                        ) : (
+                             <i className="fa-solid fa-cloud-arrow-up text-xl mb-1"></i>
+                        )}
+                        <span className="text-[10px] font-bold">{isUploading ? 'Uploading' : 'Upload'}</span>
                     </div>
                 </div>
                 <input type="file" ref={fileInputRef} hidden multiple accept="image/*" onChange={handleImageUpload} />
@@ -339,15 +365,29 @@ const ProductForm: React.FC<{
             <Input label="Contact Phone" value={formData.contactPhone} onChange={e => setFormData({...formData, contactPhone: e.target.value})} placeholder="050..." />
         </div>
 
-        <Button fullWidth size="lg" type="submit" disabled={isLoading}>{isLoading ? 'Saving...' : 'Save Product'}</Button>
+        <Button fullWidth size="lg" type="submit" disabled={isLoading || isUploading}>{isLoading ? 'Saving...' : 'Save Product'}</Button>
     </form>
   );
 };
 
 export const AddProduct: React.FC = () => {
-    const { addProduct } = useApp();
+    const { addProduct, vendors, currentUser, isDataLoading } = useApp();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
+
+    // Check vendor status
+    const currentVendor = vendors.find(v => v.userId === currentUser?.id);
+    
+    // If not loading and no vendor, show prompt
+    if (!isDataLoading && !currentVendor && currentUser) {
+         return (
+             <div className="p-8 text-center pt-20">
+                 <h2 className="text-xl font-bold mb-4">Store Profile Missing</h2>
+                 <p className="mb-4 text-gray-500">You need to set up your store details before adding products.</p>
+                 <Button onClick={() => navigate('/vendor/onboarding')}>Set Up Store</Button>
+             </div>
+         );
+    }
 
     const handleSubmit = async (data: any) => {
         setLoading(true);
@@ -398,25 +438,55 @@ export const EditProduct: React.FC = () => {
 };
 
 export const VendorOnboarding: React.FC = () => {
-    const { registerVendor } = useApp();
+    const { registerVendor, uploadFile } = useApp();
     const navigate = useNavigate();
     const [formData, setFormData] = useState({ storeName: '', storeDescription: '', location: '', contactPhone: '' });
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if(e.target.files?.[0]) {
+            setUploading(true);
+            const url = await uploadFile(e.target.files[0], 'avatars');
+            if(url) setAvatarUrl(url);
+            setUploading(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        await registerVendor(formData);
+        const result = await registerVendor({
+            ...formData,
+            storeAvatarUrl: avatarUrl || undefined
+        });
         setLoading(false);
-        navigate('/vendor/dashboard');
+        
+        if (result.success) {
+             navigate('/vendor/dashboard');
+        }
     };
 
     return (
         <div className="min-h-screen bg-white p-8 flex flex-col justify-center max-w-md mx-auto animate-slide-up">
             <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-pink-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-secondary text-2xl">
-                    <i className="fa-solid fa-store"></i>
+                <div 
+                    onClick={() => fileRef.current?.click()}
+                    className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400 text-3xl border-2 border-dashed border-gray-200 cursor-pointer overflow-hidden relative group"
+                >
+                    {avatarUrl ? (
+                        <img src={avatarUrl} className="w-full h-full object-cover" />
+                    ) : (
+                        <i className={`fa-solid ${uploading ? 'fa-spinner fa-spin' : 'fa-store'}`}></i>
+                    )}
+                    <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white text-xs font-bold">
+                        Upload Logo
+                    </div>
                 </div>
+                <input type="file" ref={fileRef} hidden accept="image/*" onChange={handleAvatarUpload} />
+                
                 <h1 className="text-2xl font-bold text-gray-900">Setup Your Store</h1>
                 <p className="text-gray-500 mt-2">Tell us about your business</p>
             </div>
@@ -427,7 +497,7 @@ export const VendorOnboarding: React.FC = () => {
                 <Input label="Campus Location" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required placeholder="e.g. Legon Hall" />
                 <Input label="Phone Number" value={formData.contactPhone} onChange={e => setFormData({...formData, contactPhone: e.target.value})} required placeholder="050..." type="tel" />
                 
-                <Button fullWidth size="lg" type="submit" disabled={loading} className="mt-4">
+                <Button fullWidth size="lg" type="submit" disabled={loading || uploading} className="mt-4">
                     {loading ? 'Creating Store...' : 'Launch Store'}
                 </Button>
             </form>

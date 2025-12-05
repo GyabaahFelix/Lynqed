@@ -233,95 +233,122 @@ export const AdminDashboard: React.FC = () => {
                                 </div>
                             </div>
                         ))}
+                        {users.length === 0 && (
+                             <div className="text-center py-10 text-gray-400 bg-white rounded-2xl">
+                                <i className="fa-solid fa-users text-3xl mb-3 opacity-20"></i>
+                                <p>No users found.</p>
+                             </div>
+                        )}
                     </div>
 
                     {/* Desktop Table View (>= md) */}
                     <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-xs uppercase text-gray-400">
-                                <tr>
-                                    <th className="px-6 py-4">User</th>
-                                    <th className="px-6 py-4">Role</th>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4 text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {users.map(u => (
-                                    <tr key={u.id}>
-                                        <td className="px-6 py-4 flex items-center gap-3">
-                                            <Avatar name={u.name} src={u.avatarUrl} size="sm" />
-                                            <div>
-                                                <p className="text-sm font-bold text-gray-900">{u.name}</p>
-                                                <p className="text-xs text-gray-400">{u.email}</p>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {u.roles.map(r => <Badge key={r} color="gray" className="mr-1">{r}</Badge>)}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {u.isBanned ? <Badge color="red">Banned</Badge> : <Badge color="green">Active</Badge>}
-                                        </td>
-                                        <td className="px-6 py-4 text-right space-x-2">
-                                            <Button size="sm" variant={u.isBanned ? 'success' : 'danger'} onClick={() => banUser(u.id, !u.isBanned)}>
-                                                {u.isBanned ? 'Unban' : 'Ban'}
-                                            </Button>
-                                        </td>
+                        {users.length === 0 ? (
+                            <div className="text-center py-12 text-gray-400">
+                                <i className="fa-solid fa-users text-3xl mb-3 opacity-20"></i>
+                                <p>No users found.</p>
+                            </div>
+                        ) : (
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 text-xs uppercase text-gray-400">
+                                    <tr>
+                                        <th className="px-6 py-4">User</th>
+                                        <th className="px-6 py-4">Role</th>
+                                        <th className="px-6 py-4">Status</th>
+                                        <th className="px-6 py-4 text-right">Action</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {users.map(u => (
+                                        <tr key={u.id}>
+                                            <td className="px-6 py-4 flex items-center gap-3">
+                                                <Avatar name={u.name} src={u.avatarUrl} size="sm" />
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-900">{u.name}</p>
+                                                    <p className="text-xs text-gray-400">{u.email}</p>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {u.roles.map(r => <Badge key={r} color="gray" className="mr-1">{r}</Badge>)}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {u.isBanned ? <Badge color="red">Banned</Badge> : <Badge color="green">Active</Badge>}
+                                            </td>
+                                            <td className="px-6 py-4 text-right space-x-2">
+                                                <Button size="sm" variant={u.isBanned ? 'success' : 'danger'} onClick={() => banUser(u.id, !u.isBanned)}>
+                                                    {u.isBanned ? 'Unban' : 'Ban'}
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
                     </div>
                 </>
             )}
 
             {view === 'products' && (
                  <div className="grid grid-cols-1 gap-4">
-                     {products.map(p => (
-                         <div key={p.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                             <div className="flex items-center gap-4">
-                                 <img src={p.images[0]} className="w-16 h-16 rounded-lg object-cover bg-gray-100" />
-                                 <div>
-                                     <h3 className="font-bold text-gray-900">{p.title}</h3>
-                                     <p className="text-xs text-gray-500">Vendor: {p.vendorId} • ₵{p.price}</p>
+                     {products.length === 0 ? (
+                        <div className="text-center py-12 bg-white rounded-2xl text-gray-400 border border-dashed border-gray-200">
+                            <i className="fa-solid fa-box-open text-3xl mb-3 opacity-20"></i>
+                            <p>No products available.</p>
+                        </div>
+                     ) : (
+                         products.map(p => (
+                             <div key={p.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                 <div className="flex items-center gap-4">
+                                     <img src={p.images[0]} className="w-16 h-16 rounded-lg object-cover bg-gray-100" />
+                                     <div>
+                                         <h3 className="font-bold text-gray-900">{p.title}</h3>
+                                         <p className="text-xs text-gray-500">Vendor: {p.vendorId} • ₵{p.price}</p>
+                                     </div>
+                                 </div>
+                                 <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                                     <Badge color={p.status === 'approved' ? 'green' : p.status === 'pending' ? 'yellow' : 'red'}>{p.status}</Badge>
+                                     {p.status === 'pending' && (
+                                         <>
+                                            <Button size="sm" variant="success" onClick={() => updateProductStatus(p.id, 'approved')}>Approve</Button>
+                                            <Button size="sm" variant="danger" onClick={() => updateProductStatus(p.id, 'rejected')}>Reject</Button>
+                                         </>
+                                     )}
+                                     <Button size="sm" variant="ghost" icon="trash" onClick={() => deleteProduct(p.id)}></Button>
                                  </div>
                              </div>
-                             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                                 <Badge color={p.status === 'approved' ? 'green' : p.status === 'pending' ? 'yellow' : 'red'}>{p.status}</Badge>
-                                 {p.status === 'pending' && (
-                                     <>
-                                        <Button size="sm" variant="success" onClick={() => updateProductStatus(p.id, 'approved')}>Approve</Button>
-                                        <Button size="sm" variant="danger" onClick={() => updateProductStatus(p.id, 'rejected')}>Reject</Button>
-                                     </>
-                                 )}
-                                 <Button size="sm" variant="ghost" icon="trash" onClick={() => deleteProduct(p.id)}></Button>
-                             </div>
-                         </div>
-                     ))}
+                         ))
+                     )}
                  </div>
             )}
 
             {view === 'vendors' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {vendors.map(v => (
-                        <Card key={v.vendorId} className="p-5 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <Avatar src={v.storeAvatarUrl} name={v.storeName} />
-                                <div>
-                                    <p className="font-bold">{v.storeName}</p>
-                                    <p className="text-xs text-gray-500">{v.location}</p>
+                vendors.length === 0 ? (
+                    <div className="text-center py-12 bg-white rounded-2xl text-gray-400 border border-dashed border-gray-200">
+                        <i className="fa-solid fa-store text-3xl mb-3 opacity-20"></i>
+                        <p>No vendors registered.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {vendors.map(v => (
+                            <Card key={v.vendorId} className="p-5 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <Avatar src={v.storeAvatarUrl} name={v.storeName} />
+                                    <div>
+                                        <p className="font-bold">{v.storeName}</p>
+                                        <p className="text-xs text-gray-500">{v.location}</p>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                {v.isApproved ? (
-                                    <Button size="sm" variant="outline" onClick={() => approveVendor(v.vendorId, false)}>Suspend</Button>
-                                ) : (
-                                    <Button size="sm" variant="success" onClick={() => approveVendor(v.vendorId, true)}>Approve</Button>
-                                )}
-                            </div>
-                        </Card>
-                    ))}
-                </div>
+                                <div>
+                                    {v.isApproved ? (
+                                        <Button size="sm" variant="outline" onClick={() => approveVendor(v.vendorId, false)}>Suspend</Button>
+                                    ) : (
+                                        <Button size="sm" variant="success" onClick={() => approveVendor(v.vendorId, true)}>Approve</Button>
+                                    )}
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                )
             )}
             
             {view === 'logistics' && (
@@ -380,23 +407,30 @@ export const AdminDashboard: React.FC = () => {
 
             {view === 'orders' && (
                  <div className="grid grid-cols-1 gap-4">
-                     {orders.map(o => (
-                         <Card key={o.id} className="p-4">
-                             <div className="flex justify-between items-start mb-2">
-                                 <div>
-                                     <h3 className="font-bold">Order #{o.id.slice(-4)}</h3>
-                                     <p className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleString()}</p>
+                     {orders.length === 0 ? (
+                        <div className="text-center py-12 bg-white rounded-2xl text-gray-400 border border-dashed border-gray-200">
+                            <i className="fa-solid fa-receipt text-3xl mb-3 opacity-20"></i>
+                            <p>No orders placed yet.</p>
+                        </div>
+                     ) : (
+                         orders.map(o => (
+                             <Card key={o.id} className="p-4">
+                                 <div className="flex justify-between items-start mb-2">
+                                     <div>
+                                         <h3 className="font-bold">Order #{o.id.slice(-4)}</h3>
+                                         <p className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleString()}</p>
+                                     </div>
+                                     <Badge color={o.status === 'delivered' ? 'green' : 'blue'}>{o.status}</Badge>
                                  </div>
-                                 <Badge color={o.status === 'delivered' ? 'green' : 'blue'}>{o.status}</Badge>
-                             </div>
-                             <div className="text-sm text-gray-700 mb-2">
-                                 Items: {o.items.length} | Total: ₵{o.total.toFixed(2)}
-                             </div>
-                             <div className="text-xs text-gray-500">
-                                 Buyer ID: {o.buyerId.slice(0,8)}... | Vendor ID: {o.vendorId}
-                             </div>
-                         </Card>
-                     ))}
+                                 <div className="text-sm text-gray-700 mb-2">
+                                     Items: {o.items.length} | Total: ₵{o.total.toFixed(2)}
+                                 </div>
+                                 <div className="text-xs text-gray-500">
+                                     Buyer ID: {o.buyerId.slice(0,8)}... | Vendor ID: {o.vendorId}
+                                 </div>
+                             </Card>
+                         ))
+                     )}
                  </div>
             )}
         </div>
