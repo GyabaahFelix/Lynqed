@@ -26,9 +26,8 @@ interface AppContextType {
   updatePassword: (password: string) => Promise<{success: boolean, error?: string}>;
   switchRole: (role: Role) => void;
   
-  uploadFile: (file: File, folder: string) => Promise<string | null>;
-  registerDeliveryPerson: (data: Partial<DeliveryPerson>) => Promise<{ success: boolean }>;
-  registerVendor: (data: { storeName: string; storeDescription: string; location: string; contactPhone: string; storeAvatarUrl?: string }) => Promise<{ success: boolean }>;
+  registerDeliveryPerson: (data: Partial<DeliveryPerson>) => Promise<void>;
+  registerVendor: (data: { storeName: string; storeDescription: string; location: string; contactPhone: string }) => Promise<void>;
   refreshData: () => Promise<void>;
   
   addProduct: (product: any) => Promise<boolean>;
@@ -69,6 +68,7 @@ const safeSetItem = (key: string, value: string) => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
+  // FIX: Initialize as empty arrays. Do NOT read large data from localStorage to prevent crash.
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -103,19 +103,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.removeItem('lynqed_vendors');
           localStorage.removeItem('lynqed_orders');
           localStorage.removeItem('lynqed_drivers');
+          console.log("Cleaned up heavy local storage items to prevent QuotaExceededError");
       } catch(e) {
           console.error("Cleanup failed", e);
       }
   }, []);
-
-  // Refs to hold latest state for event listeners to avoid dependency loops
-  const vendorsRef = useRef(vendors);
-  const currentUserRef = useRef(currentUser);
-  const currentRoleRef = useRef(currentRole);
-
-  useEffect(() => { vendorsRef.current = vendors; }, [vendors]);
-  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
-  useEffect(() => { currentRoleRef.current = currentRole; }, [currentRole]);
 
   // Audio Notification Helper
   const playNotificationSound = () => {
@@ -144,7 +136,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
   };
 
-  // Init App Effect
   useEffect(() => {
     initApp();
     
@@ -154,10 +145,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const orderSub = supabase.channel('public:orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
           fetchData();
           
-          // Enhanced Notification for Vendors using Refs to avoid closure staleness
-          if (payload.eventType === 'INSERT' && currentRoleRef.current === 'vendor') {
+          // Enhanced Notification for Vendors
+          if (payload.eventType === 'INSERT' && currentRole === 'vendor') {
               const newOrder = payload.new as Order;
-              const myVendorId = vendorsRef.current.find(v => v.userId === currentUserRef.current?.id)?.vendorId;
+              const myVendorId = vendors.find(v => v.userId === currentUser?.id)?.vendorId;
               
               if (myVendorId && newOrder.vendorId === myVendorId) {
                   playNotificationSound();
@@ -173,7 +164,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.removeChannel(productSub);
         supabase.removeChannel(orderSub);
     };
-  }, []); 
+  }, [currentUser, currentRole, vendors]);
 
   const initApp = async () => {
       await checkSession();
@@ -195,11 +186,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const fetchUserProfile = async (userId: string) => {
       try {
-          // Persisted role from storage for quick check
           const persistedRole = localStorage.getItem('lynqed_role') as Role;
-          
           const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-          
           if (data) {
               if (data.isBanned) {
                   await logout();
@@ -209,26 +197,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const user: User = { ...data, roles: data.roles || ['buyer'] };
               setCurrentUser(user);
               
-              // FORCE ADMIN ROLE if user is admin, ignoring local storage drift
-              if (user.roles.includes('admin')) {
-                  setCurrentRole('admin');
-                  safeSetItem('lynqed_role', 'admin');
-              } 
-              // Otherwise try to respect last used role if valid
-              else if (persistedRole && user.roles.includes(persistedRole)) {
-                  setCurrentRole(persistedRole);
-              } 
-              // Fallback based on available roles
-              else {
-                  if (user.roles.includes('vendor')) setCurrentRole('vendor');
-                  else if (user.roles.includes('deliveryPerson')) setCurrentRole('deliveryPerson');
-                  else setCurrentRole('buyer');
-              }
+              if (persistedRole && user.roles.includes(persistedRole)) setCurrentRole(persistedRole);
+              else setCurrentRole(user.roles.includes('admin') ? 'admin' : user.roles.includes('vendor') ? 'vendor' : 'buyer');
               return user;
           }
-      } catch (e) {
-          console.error("Profile fetch error", e);
-      }
+      } catch (e) {}
       return null;
   };
 
@@ -250,44 +223,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               fetchSafely('delivery_persons')
           ]);
 
-          if (pData) setProducts(pData.map((p: any) => ({
-              ...p,
-              vendorId: p.vendorId || p.vendor_id || p.vendorid, 
-              contactPhone: p.contactPhone || p.contact_phone,
-              // Other fields are usually snake_case matching simple keys or are handled automatically
-          })) as Product[]);
-
-          if (vData) {
-              setVendors(vData.map((v: any) => ({
-                  ...v,
-                  id: v.id, // Capture Database PK
-                  vendorId: v.vendorId || v.vendor_id || v.vendorid, 
-                  storeName: v.storeName || v.store_name,
-                  storeDescription: v.storeDescription || v.store_description,
-                  storeAvatarUrl: v.storeAvatarUrl || v.store_avatar_url,
-                  userId: v.userId || v.user_id,
-                  isApproved: v.isApproved ?? v.is_approved ?? v.isapproved
-              })) as Vendor[]);
-          }
-
+          if (pData) setProducts(pData as Product[]);
+          if (vData) setVendors(vData as Vendor[]);
           if (oData) {
               setOrders(oData.map((o: any) => ({
-                  ...o, 
-                  vendorId: o.vendorId || o.vendor_id,
-                  buyerId: o.buyerId || o.buyer_id,
-                  deliveryPersonId: o.deliveryPersonId || o.delivery_person_id,
-                  deliveryFee: o.deliveryFee || o.delivery_fee,
-                  deliveryOption: o.deliveryOption || o.delivery_option,
-                  createdAt: o.createdAt || o.created_at,
-                  items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
+                  ...o, items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items
               })) as Order[]);
           }
-          if (dData) setDeliveryPersons(dData.map((d: any) => ({
-             ...d,
-             userId: d.userId || d.user_id,
-             fullName: d.fullName || d.full_name,
-             vehicleType: d.vehicleType || d.vehicle_type,
-          })) as DeliveryPerson[]);
+          if (dData) setDeliveryPersons(dData as DeliveryPerson[]);
 
           if (localStorage.getItem('lynqed_role') === 'admin') {
               const uData = await fetchSafely('profiles');
@@ -335,6 +278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = async () => {
       await supabase.auth.signOut();
       localStorage.removeItem('lynqed_role');
+      // No need to clear other big items as they are not persisted anymore
       setCurrentUser(null);
       setCurrentRole('guest');
       setCart([]);
@@ -349,193 +293,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hideToast = () => setToast(null);
   const requestNotificationPermission = async () => (await Notification.requestPermission()) === 'granted';
 
-  // --- STORAGE UPLOAD HELPER ---
-  const uploadFile = async (file: File, folder: string): Promise<string | null> => {
-      try {
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-          const filePath = `${folder}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-              .from('lynqed-assets')
-              .upload(filePath, file);
-
-          if (uploadError) {
-              console.error('Upload error:', uploadError);
-              showToast(`Upload failed: ${uploadError.message}`, 'error');
-              return null;
-          }
-
-          const { data } = supabase.storage.from('lynqed-assets').getPublicUrl(filePath);
-          return data.publicUrl;
-      } catch (error: any) {
-          console.error('Storage error:', error);
-          showToast('Image upload failed', 'error');
-          return null;
-      }
-  };
-
   // Specific Actions
-  const registerVendor = async (data: any): Promise<{ success: boolean }> => {
-      if(!currentUser) return { success: false };
-      
-      try {
-          // Check for existing vendor profile for this user
-          const { data: existing } = await supabase.from('vendors').select('id').eq('user_id', currentUser.id).maybeSingle();
-
-          let error;
-          
-          if (existing) {
-               console.log("Updating existing vendor profile");
-               const { error: upError } = await supabase.from('vendors').update({
-                   store_name: data.storeName,
-                   store_description: data.storeDescription,
-                   location: data.location,
-                   contact_phone: data.contactPhone,
-                   store_avatar_url: data.storeAvatarUrl
-               }).eq('user_id', currentUser.id);
-               error = upError;
-          } else {
-               console.log("Creating new vendor profile");
-               const { error: inError } = await supabase.from('vendors').insert({ 
-                   vendor_id: `v-${Date.now()}`, 
-                   user_id: currentUser.id, 
-                   store_name: data.storeName,
-                   store_description: data.storeDescription,
-                   location: data.location,
-                   contact_phone: data.contactPhone,
-                   store_avatar_url: data.storeAvatarUrl,
-                   is_approved: false, 
-                   rating: 5.0 
-               });
-               error = inError;
-          }
-
-          if (error) {
-              console.error("Vendor Registration Error:", error);
-              showToast(`Registration failed: ${error.message || 'Database error'}`, "error");
-              return { success: false };
-          } 
-          
-          showToast("Store profile saved successfully", "success"); 
-          await fetchData();
-          return { success: true };
-
-      } catch (e: any) {
-          console.error("Vendor Registration Exception:", e);
-          showToast(`Unexpected error: ${e.message || e}`, "error");
-          return { success: false };
-      }
+  const registerVendor = async (data: any) => {
+      if(!currentUser) return;
+      await supabase.from('vendors').insert({ vendorId: `v-${Date.now()}`, userId: currentUser.id, ...data, isApproved: false, rating: 5.0 });
+      showToast("Store application submitted", "success"); fetchData();
   };
-  
-  const registerDeliveryPerson = async (data: any): Promise<{ success: boolean }> => {
-      if(!currentUser) return { success: false };
-      
-      const { error } = await supabase.from('delivery_persons').insert({ 
-          user_id: currentUser.id, 
-          full_name: data.fullName,
-          vehicle_type: data.vehicleType,
-          status: 'pending' 
-      });
-      
-      if (error) {
-          console.error("Delivery Registration Error:", error);
-          showToast(`Application failed: ${error.message}`, "error");
-          return { success: false };
-      }
-      
-      showToast("Rider application submitted", "success"); 
-      fetchData();
-      return { success: true };
+  const registerDeliveryPerson = async (data: any) => {
+      if(!currentUser) return;
+      await supabase.from('delivery_persons').insert({ userId: currentUser.id, ...data, status: 'pending' });
+      showToast("Rider application submitted", "success"); fetchData();
   };
-  
   const addProduct = async (prod: any) => {
-      if(!currentUser) {
-          showToast("You must be logged in.", "error");
-          return false;
-      }
-
-      // Try finding vendor in state first
-      let v = vendors.find(v => v.userId === currentUser.id);
-      
-      // Fallback: Fetch directly from DB if missing in state (Sync issues)
-      if (!v) {
-          try {
-             // Use maybeSingle to avoid throwing if not found
-             const { data } = await supabase.from('vendors').select('*').eq('user_id', currentUser.id).maybeSingle();
-             if(data) {
-                 v = {
-                     ...data,
-                     vendorId: data.vendor_id,
-                     userId: data.user_id,
-                     // Minimal fields needed for FK constraint and logic
-                     storeName: data.store_name || 'My Store',
-                     storeDescription: '',
-                     location: '',
-                     isApproved: data.is_approved,
-                     rating: 5
-                 };
-             }
-          } catch(e) {
-              console.error("Vendor fetch fallback failed", e);
-          }
-      }
-      
-      if(!v) {
-          showToast("Vendor profile not found. Please set up your store.", "error");
-          return false;
-      }
-      
-      const { customCategory, vendorId, ...dbProduct } = prod;
-      
-      // Explicit snake_case mapping for DB insert
-      const productPayload = {
-          vendor_id: v.vendorId, // Use the resolved vendor ID
-          title: dbProduct.title,
-          description: dbProduct.description,
-          price: dbProduct.price,
-          currency: 'GHS', // Default to GHS
-          category: dbProduct.category,
-          images: dbProduct.images,
-          stock: dbProduct.stock,
-          status: 'pending',
-          location: dbProduct.location,
-          contact_phone: dbProduct.contactPhone
-      };
-
-      const { error } = await supabase.from('products').insert(productPayload);
-      
-      if (error) {
-          console.error("Supabase Insert Error:", error);
-          showToast(`Failed to add product: ${error.message}`, "error");
-          return false;
-      }
-      
-      showToast("Product submitted for approval", "success"); 
-      fetchData(); 
-      return true;
+      if(!currentUser) return false;
+      const v = vendors.find(v => v.userId === currentUser.id);
+      if(!v) return false;
+      const { customCategory, ...dbProduct } = prod;
+      await supabase.from('products').insert({ ...dbProduct, vendorId: v.vendorId, status: 'pending' });
+      showToast("Product submitted", "success"); fetchData(); return true;
   };
-  
   const updateProduct = async (id: string, data: any) => {
-      const { customCategory, vendorId, contactPhone, ...rest } = data;
-      
-      // Map to snake_case for update
-      const updatePayload = {
-          ...rest,
-          contact_phone: contactPhone
-      };
-
-      const { error } = await supabase.from('products').update(updatePayload).eq('id', id);
-      
-      if (error) {
-          showToast("Update failed", "error");
-          console.error(error);
-      } else {
-          showToast("Product updated", "success");
-          fetchData();
-      }
+      const { customCategory, ...dbData } = data;
+      await supabase.from('products').update(dbData).eq('id', id); fetchData();
   };
-  
   const deleteProduct = async (id: string) => { await supabase.from('products').delete().eq('id', id); fetchData(); };
   const updateProductStatus = async (id: string, status: string) => { await supabase.from('products').update({status}).eq('id', id); fetchData(); };
   
@@ -576,17 +356,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const subtotal = items.reduce((s:number, i:any) => s + i.product.price * i.quantity, 0);
               
               const { error } = await supabase.from('orders').insert({ 
-                  buyer_id: currentUser.id, 
-                  vendor_id: vid, 
+                  buyerId: currentUser.id, 
+                  vendorId: vid, 
                   items, 
                   total: subtotal+fee, 
-                  delivery_fee: fee, 
+                  deliveryFee: fee, 
                   status: 'placed', 
-                  delivery_option: option 
+                  deliveryOption: option 
               });
 
               if (error) {
-                 throw error;
+                  // Fallback if deliveryFee column missing
+                  if (error.message.includes('deliveryFee')) {
+                      await supabase.from('orders').insert({ 
+                          buyerId: currentUser.id, 
+                          vendorId: vid, 
+                          items, 
+                          total: subtotal+fee, 
+                          status: 'placed', 
+                          deliveryOption: option 
+                      });
+                  } else {
+                      throw error;
+                  }
               }
           }
           showToast("Order Placed!", "success"); 
@@ -597,105 +389,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           showToast(`Order failed: ${e.message}`, "error");
       }
   };
-  
   const updateOrderStatus = async (oid: string, status: string) => { await supabase.from('orders').update({status}).eq('id', oid); fetchData(); };
-  const assignDelivery = async (oid: string) => { if(currentUser) await supabase.from('orders').update({delivery_person_id: currentUser.id, status: 'assigned'}).eq('id', oid); fetchData(); };
+  const assignDelivery = async (oid: string) => { if(currentUser) await supabase.from('orders').update({deliveryPersonId: currentUser.id, status: 'assigned'}).eq('id', oid); fetchData(); };
   
   // Admin
   const banUser = async (uid: string, s: boolean) => { await supabase.from('profiles').update({isBanned: s}).eq('id', uid); fetchData(); };
   const deleteUser = async (uid: string) => { await supabase.from('profiles').delete().eq('id', uid); fetchData(); };
-  
-  // ROBUST VENDOR APPROVAL - ID Based
-  const approveVendor = async (vid: string, s: boolean) => { 
-      // vid corresponds to the custom 'vendorId' string (e.g. v-123)
-      // We first find the full vendor object to get its Database PK (id)
-      const vendor = vendors.find(v => v.vendorId === vid);
-      
-      if (!vendor) {
-          showToast("Error: Vendor not found in state", "error");
-          return;
-      }
-      
-      showToast("Updating vendor...", "info");
-      
-      try {
-          let query;
-          // Strategy 1: Use Database Primary Key (safest)
-          if (vendor.id) {
-               console.log(`Updating via DB PK: ${vendor.id}`);
-               query = supabase.from('vendors').update({ is_approved: s }).eq('id', vendor.id);
-          } else {
-               // Strategy 2: Fallback to custom vendor_id column
-               console.log(`Updating via vendor_id column: ${vid}`);
-               query = supabase.from('vendors').update({ is_approved: s }).eq('vendor_id', vid);
-          }
-
-          const { error } = await query;
-          
-          if (error) {
-             // Retry with camelCase if snake_case failed (unlikely but possible if manually created)
-             console.warn("Snake_case update failed, trying camelCase...", error);
-             const { error: retryError } = await supabase.from('vendors').update({ isApproved: s }).eq(vendor.id ? 'id' : 'vendorId', vendor.id || vid);
-             
-             if (retryError) throw error; // Throw original error to see actual DB issue
-          }
-          
-          await fetchData();
-          showToast(s ? "Vendor Approved" : "Vendor Suspended", "success");
-      } catch (err: any) {
-          console.error("Approval Error Details:", err);
-          showToast(`Failed: ${err.message || 'Check Console'}`, "error");
-      }
-  };
-  
-  const approveDeliveryPerson = async (id: string, uid: string, status: 'approved' | 'rejected' | 'suspended') => { 
-      try {
-          // 1. Update status in delivery_persons table
-          const { error: updateError } = await supabase
-              .from('delivery_persons')
-              .update({ status })
-              .eq('id', id);
-
-          if (updateError) throw updateError;
-
-          // 2. Sync Role in Profiles
-          const { data: profile } = await supabase.from('profiles').select('roles').eq('id', uid).single();
-          
-          if (profile) {
-               let roles = profile.roles || [];
-               let changed = false;
-
-               if (status === 'approved') {
-                   if (!roles.includes('deliveryPerson')) {
-                       roles.push('deliveryPerson');
-                       changed = true;
-                   }
-               } else {
-                   // For rejected or suspended, remove the role
-                   if (roles.includes('deliveryPerson')) {
-                       roles = roles.filter((r: string) => r !== 'deliveryPerson');
-                       changed = true;
-                   }
-               }
-
-               if (changed) {
-                   await supabase.from('profiles').update({ roles }).eq('id', uid);
-               }
-          }
-          
-          showToast(`Rider application ${status}`, "success");
-          await fetchData(); 
-      } catch (e: any) {
-          console.error("Approval error", e);
-          showToast(`Failed: ${e.message}`, "error");
-      }
+  const approveVendor = async (vid: string, s: boolean) => { await supabase.from('vendors').update({isApproved: s}).eq('vendorId', vid); fetchData(); };
+  const approveDeliveryPerson = async (id: string, uid: string, status: string) => { 
+      await supabase.from('delivery_persons').update({status}).eq('id', id);
+      if(status === 'approved') await supabase.from('profiles').update({roles: ['deliveryPerson']}).eq('id', uid); 
+      fetchData(); 
   };
 
   return (
     <AppContext.Provider value={{
         currentUser, currentRole, products, vendors, orders, deliveryPersons, users, isLoading, isDataLoading, cart, favorites, toast,
         login, signup, logout, resetPassword, updatePassword, switchRole,
-        uploadFile, registerVendor, registerDeliveryPerson, refreshData: fetchData,
+        registerVendor, registerDeliveryPerson, refreshData: fetchData,
         addProduct, updateProduct, updateProductStatus, deleteProduct,
         addToCart, updateCartQuantity, removeFromCart, clearCart, placeOrder, updateOrderStatus, assignDelivery, toggleFavorite,
         banUser, deleteUser, approveVendor, approveDeliveryPerson,

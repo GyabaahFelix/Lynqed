@@ -12,8 +12,7 @@ export interface User {
 }
 
 export interface Vendor {
-  id?: string; // Database Primary Key (UUID/Int)
-  vendorId: string; // Custom String ID (e.g. v-1234)
+  vendorId: string;
   userId: string;
   storeName: string;
   storeDescription: string;
