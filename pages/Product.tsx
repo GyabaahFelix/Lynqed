@@ -151,12 +151,16 @@ export const ProductDetail: React.FC = () => {
         if (isInCart) updateCartQuantity(product.id, newQ);
     };
 
-    const handleAddToCart = () => {
+    const handleBuyNow = () => {
+        // If already in cart, update quantity to match selection
+        // If not in cart, add it
         if (isInCart) {
-            removeFromCart(product.id);
+            updateCartQuantity(product.id, quantity);
         } else {
             addToCart(product, quantity);
         }
+        // Direct to checkout
+        navigate('/buyer/checkout');
     };
 
     return (
@@ -279,21 +283,13 @@ export const ProductDetail: React.FC = () => {
                                     </button>
                                 </div>
                                 
-                                {/* Add To Cart - Franko Red/Orange Gradient */}
+                                {/* Buy Now Button */}
                                 <button 
-                                    onClick={handleAddToCart}
+                                    onClick={handleBuyNow}
                                     disabled={product.stock === 0}
-                                    className={`flex-1 h-12 rounded-lg font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${isInCart ? 'bg-green-600 hover:bg-green-700' : 'bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700'} ${product.stock === 0 ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                                    className={`flex-1 h-12 rounded-lg font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 ${product.stock === 0 ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                                 >
-                                    {isInCart ? (
-                                        <>
-                                            <i className="fa-solid fa-check"></i> Added to Cart
-                                        </>
-                                    ) : (
-                                        <>
-                                            <i className="fa-solid fa-cart-shopping"></i> Add to Cart
-                                        </>
-                                    )}
+                                    <i className="fa-solid fa-bolt"></i> Buy Now
                                 </button>
                             </div>
                             
