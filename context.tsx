@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Product, Vendor, Order, CartItem, DeliveryPerson, Role, OrderStatus } from './types';
 import { supabase } from './supabaseClient';
@@ -647,17 +648,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
   };
   
-  const approveDeliveryPerson = async (id: string, uid: string, status: string) => { 
-      await supabase.from('delivery_persons').update({status}).eq('id', id);
-      if(status === 'approved') {
-          // Add role to user profile
-           const { data } = await supabase.from('profiles').select('roles').eq('id', uid).single();
-           if(data) {
-               const newRoles = [...(data.roles || []), 'deliveryPerson'];
-               await supabase.from('profiles').update({roles: newRoles}).eq('id', uid);
-           }
+  const approveDeliveryPerson = async (id: string, uid: string, status: 'approved' | 'rejected' | 'suspended') => { 
+      try {
+          // 1. Update status in delivery_persons table
+          const { error: updateError } = await supabase
+              .from('delivery_persons')
+              .update({ status })
+              .eq('id', id);
+
+          if (updateError) throw updateError;
+
+          // 2. Sync Role in Profiles
+          const { data: profile } = await supabase.from('profiles').select('roles').eq('id', uid).single();
+          
+          if (profile) {
+               let roles = profile.roles || [];
+               let changed = false;
+
+               if (status === 'approved') {
+                   if (!roles.includes('deliveryPerson')) {
+                       roles.push('deliveryPerson');
+                       changed = true;
+                   }
+               } else {
+                   // For rejected or suspended, remove the role
+                   if (roles.includes('deliveryPerson')) {
+                       roles = roles.filter((r: string) => r !== 'deliveryPerson');
+                       changed = true;
+                   }
+               }
+
+               if (changed) {
+                   await supabase.from('profiles').update({ roles }).eq('id', uid);
+               }
+          }
+          
+          showToast(`Rider application ${status}`, "success");
+          await fetchData(); 
+      } catch (e: any) {
+          console.error("Approval error", e);
+          showToast(`Failed: ${e.message}`, "error");
       }
-      fetchData(); 
   };
 
   return (
